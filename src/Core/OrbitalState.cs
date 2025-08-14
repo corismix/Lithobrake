@@ -1,4 +1,5 @@
 using System;
+using Lithobrake.Core.Orbital;
 
 namespace Lithobrake.Core
 {
@@ -139,31 +140,15 @@ namespace Lithobrake.Core
         }
         
         /// <summary>
-        /// Convert orbital state to Cartesian position and velocity at given time
+        /// Convert orbital state to Cartesian position and velocity at given time using centralized Kepler solver
         /// </summary>
         public (Double3 position, Double3 velocity) ToCartesian(double time)
         {
-            // Calculate mean anomaly at given time
-            double meanAnomalyAtTime = MeanAnomaly + MeanMotion * (time - Epoch);
+            // Use centralized Kepler solver for high-precision calculations
+            Double3 position = Kepler.GetPositionAtTime(this, time);
+            Double3 velocity = Kepler.GetVelocityAtTime(this, time);
             
-            // Solve Kepler's equation for eccentric anomaly
-            double eccentricAnomaly = SolveKeplerEquation(meanAnomalyAtTime);
-            
-            // Convert to true anomaly
-            double trueAnomaly = EccentricToTrueAnomaly(eccentricAnomaly);
-            
-            // Calculate position in orbital plane
-            double r = SemiMajorAxis * (1 - Eccentricity * Math.Cos(eccentricAnomaly));
-            double x = r * Math.Cos(trueAnomaly);
-            double y = r * Math.Sin(trueAnomaly);
-            
-            // Calculate velocity in orbital plane using vis-viva equation
-            double h = Math.Sqrt(GravitationalParameter * SemiMajorAxis * (1 - Eccentricity * Eccentricity));
-            double vx = -h * Math.Sin(trueAnomaly) / r;
-            double vy = h * (Eccentricity + Math.Cos(trueAnomaly)) / r;
-            
-            // Transform from orbital plane to inertial coordinates
-            return TransformToInertial(new Double3(x, y, 0), new Double3(vx, vy, 0));
+            return (position, velocity);
         }
         
         /// <summary>
@@ -197,31 +182,19 @@ namespace Lithobrake.Core
         public bool IsEquatorial => Math.Abs(Inclination) < UNIVERSE_CONSTANTS.PRECISION_THRESHOLD;
         
         /// <summary>
-        /// Solve Kepler's equation using Newton-Raphson method
+        /// Solve Kepler's equation using centralized high-precision solver
         /// </summary>
         private double SolveKeplerEquation(double meanAnomaly)
         {
-            // Normalize mean anomaly to [0, 2π]
-            meanAnomaly = meanAnomaly % (2 * Math.PI);
-            if (meanAnomaly < 0) meanAnomaly += 2 * Math.PI;
-            
-            // Initial guess
-            double E = meanAnomaly + Eccentricity * Math.Sin(meanAnomaly);
-            
-            // Newton-Raphson iteration
-            for (int i = 0; i < UNIVERSE_CONSTANTS.KEPLER_MAX_ITERATIONS; i++)
+            // Use centralized Kepler solver for consistency and precision
+            if (Eccentricity < 1.0)
             {
-                double f = E - Eccentricity * Math.Sin(E) - meanAnomaly;
-                double df = 1 - Eccentricity * Math.Cos(E);
-                
-                double deltaE = f / df;
-                E -= deltaE;
-                
-                if (Math.Abs(deltaE) < UNIVERSE_CONSTANTS.KEPLER_TOLERANCE)
-                    break;
+                return Kepler.SolveElliptic(meanAnomaly, Eccentricity);
             }
-            
-            return E;
+            else
+            {
+                return Kepler.SolveHyperbolic(meanAnomaly, Eccentricity);
+            }
         }
         
         /// <summary>
@@ -305,6 +278,48 @@ namespace Lithobrake.Core
         }
         
         /// <summary>
+        /// Generate trajectory sampling points using centralized Kepler solver
+        /// </summary>
+        /// <param name="sampleCount">Number of points to generate</param>
+        /// <param name="adaptiveDensity">Use adaptive density near periapsis/apoapsis</param>
+        /// <returns>Array of position points along trajectory</returns>
+        public Double3[] SampleTrajectory(int sampleCount, bool adaptiveDensity = true)
+        {
+            return Kepler.SampleTrajectory(this, sampleCount, adaptiveDensity);
+        }
+        
+        /// <summary>
+        /// Validate energy conservation using centralized solver
+        /// </summary>
+        /// <param name="propagationTime">Time to test energy conservation over</param>
+        /// <param name="tolerance">Relative tolerance for energy conservation</param>
+        /// <returns>True if energy is conserved within tolerance</returns>
+        public bool ValidateEnergyConservation(double propagationTime, double tolerance = 1e-12)
+        {
+            return Kepler.ValidateEnergyConservation(this, propagationTime, tolerance);
+        }
+        
+        /// <summary>
+        /// Get position at specific time using centralized solver
+        /// </summary>
+        /// <param name="time">Time since epoch</param>
+        /// <returns>Position vector in inertial coordinates</returns>
+        public Double3 GetPositionAtTime(double time)
+        {
+            return Kepler.GetPositionAtTime(this, time);
+        }
+        
+        /// <summary>
+        /// Get velocity at specific time using centralized solver
+        /// </summary>
+        /// <param name="time">Time since epoch</param>
+        /// <returns>Velocity vector in inertial coordinates</returns>
+        public Double3 GetVelocityAtTime(double time)
+        {
+            return Kepler.GetVelocityAtTime(this, time);
+        }
+        
+        /// <summary>
         /// Validate orbital state for numerical stability
         /// </summary>
         public bool IsValid()
@@ -314,6 +329,44 @@ namespace Lithobrake.Core
                    Eccentricity >= 0 &&
                    Inclination >= 0 && Inclination <= Math.PI &&
                    !double.IsNaN(MeanAnomaly) && !double.IsInfinity(MeanAnomaly);
+        }
+        
+        /// <summary>
+        /// Create orbital state from Cartesian coordinates that have been shifted by floating origin.
+        /// This method handles the coordinate transformation needed when the floating origin system
+        /// shifts world coordinates but the orbital mechanics need to remain relative to the celestial body.
+        /// </summary>
+        /// <param name="worldPosition">Position in world coordinates (after origin shift)</param>
+        /// <param name="worldVelocity">Velocity in world coordinates</param>
+        /// <param name="celestialBodyPosition">Current position of the celestial body in world coordinates</param>
+        /// <param name="epoch">Time reference</param>
+        /// <param name="gravitationalParameter">Gravitational parameter of celestial body</param>
+        /// <returns>Orbital state relative to the celestial body</returns>
+        public static OrbitalState FromWorldCartesian(Double3 worldPosition, Double3 worldVelocity, 
+                                                     Double3 celestialBodyPosition, double epoch,
+                                                     double gravitationalParameter = UNIVERSE_CONSTANTS.KERBIN_GRAVITATIONAL_PARAMETER)
+        {
+            // Convert world coordinates to celestial-body-relative coordinates
+            Double3 relativePosition = worldPosition - celestialBodyPosition;
+            // Velocity remains the same since both vessel and body move together during origin shifts
+            
+            return FromCartesian(relativePosition, worldVelocity, epoch, gravitationalParameter);
+        }
+        
+        /// <summary>
+        /// Handle floating origin shift by updating the epoch and recalculating if needed.
+        /// Since orbital mechanics are relative to the celestial body, the orbital elements
+        /// themselves don't change during origin shifts, but we may need to update references.
+        /// </summary>
+        /// <param name="originShiftDelta">The coordinate shift amount (not used for orbital mechanics)</param>
+        /// <param name="currentTime">Current time for epoch update</param>
+        /// <returns>Updated orbital state with current epoch</returns>
+        public OrbitalState HandleOriginShift(Double3 originShiftDelta, double currentTime)
+        {
+            // For orbital mechanics, the origin shift doesn't affect the orbital elements
+            // since they are relative to the celestial body, not the world origin.
+            // We just need to propagate to the current time to maintain accuracy.
+            return PropagateToTime(currentTime);
         }
         
         // Equality and comparison

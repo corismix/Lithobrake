@@ -8,8 +8,9 @@ namespace Lithobrake.Core
     /// <summary>
     /// Singleton physics manager for Lithobrake rocket simulation.
     /// Manages Jolt physics engine at fixed 60Hz timestep with vessel registration and performance monitoring.
+    /// Coordinates with floating origin system for precision preservation.
     /// </summary>
-    public partial class PhysicsManager : Node3D
+    public partial class PhysicsManager : Node3D, IOriginShiftAware
     {
         private static PhysicsManager? _instance;
         public static PhysicsManager Instance
@@ -47,6 +48,10 @@ namespace Lithobrake.Core
         public const uint LayerDynamic = 2;     // Dynamic objects  
         public const uint LayerVessel = 4;      // Vessel parts
         public const uint LayerDebris = 8;      // Separated parts
+        
+        // Floating origin system integration
+        private bool _isOriginShiftRegistered = false;
+        private Double3 _worldOriginOffset = Double3.Zero;
 
         public override void _Ready()
         {
@@ -61,8 +66,11 @@ namespace Lithobrake.Core
                 GD.Print("PhysicsManager: Registered with PerformanceMonitor");
             }
             
+            // Register with floating origin system (critical priority)
+            FloatingOriginManager.RegisterOriginShiftAware(this);
+            
             GD.Print($"PhysicsManager: Initialized with {FixedDelta:F6}s fixed delta (60Hz)");
-            GD.Print("PhysicsManager: Jolt Physics engine configured");
+            GD.Print("PhysicsManager: Jolt Physics engine configured with floating origin support");
         }
 
         private void ConfigurePhysicsWorld()
@@ -113,6 +121,13 @@ namespace Lithobrake.Core
                 }
                 
                 vessel.ProcessPhysics(FixedDelta);
+                
+                // Monitor vessel position for floating origin shifts
+                var vesselState = vessel.GetVesselState();
+                if (vesselState.IsActive)
+                {
+                    FloatingOriginManager.MonitorOriginDistance(vesselState.Position);
+                }
             }
         }
 
@@ -263,6 +278,105 @@ namespace Lithobrake.Core
         /// Check if singleton is valid
         /// </summary>
         public static new bool IsInstanceValid => _instance != null && GodotObject.IsInstanceValid(_instance);
+        
+        /// <summary>
+        /// Check if vessel should trigger coast period for origin shift
+        /// </summary>
+        public bool IsInCoastPeriod()
+        {
+            // Check all active vessels for coast period conditions
+            foreach (var vessel in _activeVessels)
+            {
+                if (vessel == null || !GodotObject.IsInstanceValid(vessel))
+                    continue;
+                
+                var (altitude, velocity, _, inAtmosphere) = vessel.GetOrbitalMetrics();
+                
+                if (inAtmosphere)
+                {
+                    // Check dynamic pressure using atmospheric conditions
+                    var dynamicPressure = AtmosphericConditions.GetDynamicPressure(altitude, velocity);
+                    
+                    if (dynamicPressure > 1000.0) // 1 kPa max dynamic pressure for shifts
+                    {
+                        return false;
+                    }
+                }
+                
+                // TODO: Add thrust checking when propulsion system is implemented
+                // For now, assume coast period if dynamic pressure is low
+            }
+            
+            return true; // Safe to perform origin shift
+        }
+        
+        #region IOriginShiftAware Implementation
+        
+        /// <summary>
+        /// Handle floating origin shift by coordinating physics system updates
+        /// </summary>
+        /// <param name="deltaPosition">The coordinate shift amount</param>
+        public void HandleOriginShift(Double3 deltaPosition)
+        {
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            
+            try
+            {
+                // Update world origin offset for reference
+                _worldOriginOffset += deltaPosition;
+                
+                // Update test body position if it exists
+                if (_testBody != null && GodotObject.IsInstanceValid(_testBody))
+                {
+                    var currentPos = Double3.FromVector3(_testBody.GlobalPosition);
+                    var newPos = currentPos + deltaPosition;
+                    _testBody.GlobalPosition = newPos.ToVector3();
+                }
+                
+                // Note: Vessels handle their own origin shifts through their IOriginShiftAware implementation
+                // PhysicsManager just needs to maintain physics world coherence
+                
+                stopwatch.Stop();
+                double shiftTime = stopwatch.Elapsed.TotalMilliseconds;
+                
+                GD.Print($"PhysicsManager: Handled origin shift in {shiftTime:F3}ms, world offset now {_worldOriginOffset.Length:F1}m");
+                
+                if (shiftTime > 0.05) // 0.05ms target for physics manager
+                {
+                    GD.PrintErr($"PhysicsManager: Origin shift handling took {shiftTime:F3}ms (target: 0.05ms)");
+                }
+            }
+            catch (Exception ex)
+            {
+                GD.PrintErr($"PhysicsManager: Error handling origin shift: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Whether this physics manager is registered for origin shift notifications
+        /// </summary>
+        public bool IsRegistered
+        {
+            get => _isOriginShiftRegistered;
+            set => _isOriginShiftRegistered = value;
+        }
+        
+        /// <summary>
+        /// Critical priority for physics system (updated first)
+        /// </summary>
+        public int ShiftPriority => OriginShiftPriority.Critical;
+        
+        /// <summary>
+        /// Always receive origin shift notifications when registered
+        /// </summary>
+        public bool ShouldReceiveOriginShifts => IsRegistered;
+        
+        /// <summary>
+        /// Get current world origin offset for debugging
+        /// </summary>
+        public Double3 GetWorldOriginOffset() => _worldOriginOffset;
+        
+        #endregion
     }
 
     /// <summary>

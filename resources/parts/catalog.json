@@ -1,0 +1,55 @@
+{
+  "version": "1.0",
+  "parts": [
+    {
+      "partId": "command-pod",
+      "name": "Mk1 Command Pod",
+      "description": "A basic command pod capable of housing one crew member and providing vessel control authority. Contains life support systems and flight computers.",
+      "type": "Command",
+      "mass": {
+        "dryMass": 100.0,
+        "fuelMass": 0.0
+      },
+      "command": {
+        "crewCapacity": 1,
+        "electricCharge": 50.0,
+        "electricChargeMax": 50.0,
+        "hasSAS": true
+      }
+    },
+    {
+      "partId": "fuel-tank",
+      "name": "FL-T400 Fuel Tank",
+      "description": "A standard liquid fuel tank for storing rocket propellant. Features crossfeed capability and durable construction for reliable fuel delivery to engines.",
+      "type": "FuelTank",
+      "mass": {
+        "dryMass": 500.0,
+        "fuelMass": 3600.0
+      },
+      "fuelTank": {
+        "liquidFuel": 4500.0,
+        "liquidFuelMax": 4500.0,
+        "oxidizer": 0.0,
+        "oxidizerMax": 0.0,
+        "canCrossfeed": true
+      }
+    },
+    {
+      "partId": "engine",
+      "name": "LV-T30 \"Reliant\" Engine",
+      "description": "A reliable liquid fuel rocket engine providing 200kN of thrust. Features efficient combustion and moderate specific impulse suitable for lower atmosphere operation.",
+      "type": "Engine",
+      "mass": {
+        "dryMass": 250.0,
+        "fuelMass": 0.0
+      },
+      "engine": {
+        "maxThrust": 200000.0,
+        "specificImpulse": 280.0,
+        "fuelConsumption": 72.5,
+        "canGimbal": true,
+        "gimbalRange": 5.0
+      }
+    }
+  ]
+}

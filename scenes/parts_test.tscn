@@ -1,0 +1,59 @@
+[gd_scene load_steps=7 format=3 uid=\"uid://c2q8wk1h3p4lm\"]
+
+[ext_resource type=\"Script\" path=\"res://src/Core/PerformanceMonitor.cs\" id=\"1_performance\"]
+[ext_resource type=\"Script\" path=\"res://src/Core/PartTests.cs\" id=\"2_part_tests\"]
+[ext_resource type=\"Script\" path=\"res://src/Core/TestRocketAssembly.cs\" id=\"3_test_assembly\"]
+[ext_resource type=\"Script\" path=\"res://src/Core/PhysicsManager.cs\" id=\"4_physics_manager\"]
+
+[sub_resource type=\"Environment\" id=\"Environment_1\"]
+background_mode = 1
+background_color = Color(0.2, 0.3, 0.4, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.8, 0.9, 1, 1)
+ambient_light_energy = 0.3
+
+[sub_resource type=\"CameraAttributesPractical\" id=\"CameraAttributesPractical_1\"]
+
+[node name=\"PartsTestScene\" type=\"Node3D\"]
+
+[node name=\"Environment\" type=\"Node3D\" parent=\".\"]
+
+[node name=\"Camera3D\" type=\"Camera3D\" parent=\"Environment\"]
+transform = Transform3D(0.707107, -0.5, 0.5, 0, 0.707107, 0.707107, -0.707107, -0.5, 0.5, 10, 8, 10)
+attributes = SubResource(\"CameraAttributesPractical_1\")
+
+[node name=\"DirectionalLight3D\" type=\"DirectionalLight3D\" parent=\"Environment\"]
+transform = Transform3D(0.707107, -0.5, 0.5, 0, 0.707107, 0.707107, -0.707107, -0.5, 0.5, 0, 5, 0)
+light_energy = 1.2
+shadow_enabled = true
+
+[node name=\"WorldEnvironment\" type=\"WorldEnvironment\" parent=\"Environment\"]
+environment = SubResource(\"Environment_1\")
+
+[node name=\"PerformanceMonitor\" type=\"CanvasLayer\" parent=\".\"]
+script = ExtResource(\"1_performance\")
+
+[node name=\"PhysicsManager\" type=\"Node3D\" parent=\".\"]
+script = ExtResource(\"4_physics_manager\")
+
+[node name=\"PartTests\" type=\"Node3D\" parent=\".\"]
+script = ExtResource(\"2_part_tests\")
+
+[node name=\"TestRocketAssembly\" type=\"Node3D\" parent=\".\"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, 0)
+script = ExtResource(\"3_test_assembly\")
+
+[node name=\"Ground\" type=\"StaticBody3D\" parent=\".\"]
+transform = Transform3D(20, 0, 0, 0, 1, 0, 0, 0, 20, 0, -10, 0)
+
+[node name=\"GroundMesh\" type=\"MeshInstance3D\" parent=\"Ground\"]
+mesh = SubResource(\"BoxMesh_ground\")
+
+[node name=\"GroundCollision\" type=\"CollisionShape3D\" parent=\"Ground\"]
+shape = SubResource(\"BoxShape3D_ground\")
+
+[sub_resource type=\"BoxMesh\" id=\"BoxMesh_ground\"]
+size = Vector3(1, 1, 1)
+
+[sub_resource type=\"BoxShape3D\" id=\"BoxShape3D_ground\"]
+size = Vector3(1, 1, 1)

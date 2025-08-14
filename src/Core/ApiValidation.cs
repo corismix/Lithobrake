@@ -75,18 +75,18 @@ namespace Lithobrake.Core
             try
             {
                 // Test getting current time scale
-                double originalTimeScale = Engine.TimeScale;
+                double originalTimeScale = Godot.Engine.TimeScale;
                 _results.OriginalTimeScale = originalTimeScale;
                 
                 // Test setting time scale for time warp functionality
-                Engine.TimeScale = 2.0;
-                double newTimeScale = Engine.TimeScale;
+                Godot.Engine.TimeScale = 2.0;
+                double newTimeScale = Godot.Engine.TimeScale;
                 
                 // Verify the change took effect
                 _results.TimeScaleApiWorking = Math.Abs(newTimeScale - 2.0) < 0.001;
                 
                 // Restore original time scale
-                Engine.TimeScale = originalTimeScale;
+                Godot.Engine.TimeScale = originalTimeScale;
                 
                 GD.Print($"TimeScale API test: {(_results.TimeScaleApiWorking ? "✅ PASS" : "❌ FAIL")}");
                 GD.Print($"Original TimeScale: {originalTimeScale}, Test TimeScale: {newTimeScale}");
@@ -106,12 +106,12 @@ namespace Lithobrake.Core
             try
             {
                 // Check current physics tick rate
-                int currentTicksPerSecond = Engine.PhysicsTicksPerSecond;
+                int currentTicksPerSecond = Godot.Engine.PhysicsTicksPerSecond;
                 _results.OriginalPhysicsTicksPerSecond = currentTicksPerSecond;
                 
                 // Test setting physics tick rate to exactly 60Hz
-                Engine.PhysicsTicksPerSecond = 60;
-                int newTicksPerSecond = Engine.PhysicsTicksPerSecond;
+                Godot.Engine.PhysicsTicksPerSecond = 60;
+                int newTicksPerSecond = Godot.Engine.PhysicsTicksPerSecond;
                 
                 // Verify the change took effect
                 _results.PhysicsConfigApiWorking = newTicksPerSecond == 60;
@@ -200,7 +200,7 @@ namespace Lithobrake.Core
             try
             {
                 // Check Godot version
-                var versionDict = Engine.GetVersionInfo();
+                var versionDict = Godot.Engine.GetVersionInfo();
                 _results.GodotVersionMajor = versionDict["major"].AsInt32();
                 _results.GodotVersionMinor = versionDict["minor"].AsInt32();
                 _results.GodotVersionPatch = versionDict["patch"].AsInt32();
@@ -238,7 +238,7 @@ namespace Lithobrake.Core
             try
             {
                 // Wait for a few frames to get stable measurements - using frame counter instead
-                ulong targetFrame = Engine.GetProcessFrames() + 3;
+                ulong targetFrame = Godot.Engine.GetProcessFrames() + 3;
                 
                 var metrics = _performanceMonitor.GetCurrentMetrics();
                 _results.BaselineFrameTime = metrics.FrameTime;

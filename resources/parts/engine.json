@@ -1,0 +1,64 @@
+{
+  "partId": "engine",
+  "name": "LV-T30 \"Reliant\" Engine",
+  "description": "A reliable liquid fuel rocket engine providing 200kN of thrust. Features efficient combustion and moderate specific impulse suitable for lower atmosphere operation.",
+  "type": "Engine",
+  "mass": {
+    "dryMass": 250.0,
+    "fuelMass": 0.0
+  },
+  "dimensions": {
+    "width": 1.6,
+    "height": 1.5,
+    "depth": 1.6
+  },
+  "engine": {
+    "maxThrust": 200000.0,
+    "specificImpulse": 280.0,
+    "fuelConsumption": 72.5,
+    "canGimbal": true,
+    "gimbalRange": 5.0,
+    "throttleResponse": 2.0,
+    "spoolUpTime": 1.0,
+    "spoolDownTime": 0.5,
+    "minThrottle": 0.0,
+    "maxThrottle": 1.0,
+    "atmosphericCurve": {
+      "seaLevel": 280.0,
+      "vacuum": 310.0
+    }
+  },
+  "attachmentNodes": {
+    "top": {
+      "position": [0, 0.75, 0],
+      "orientation": [0, 1, 0],
+      "type": "Stack",
+      "size": "Size1",
+      "maxMass": 2000.0
+    }
+  },
+  "resources": {
+    "meshPath": "res://resources/parts/meshes/engine.obj",
+    "texturePath": "res://resources/parts/textures/engine.png",
+    "materialPath": "res://resources/parts/materials/engine.tres"
+  },
+  "effects": {
+    "exhaustScale": 1.0,
+    "exhaustOffset": [0, -0.8, 0],
+    "smokeColor": [0.8, 0.8, 0.9, 0.6],
+    "flameColor": [1.0, 0.8, 0.3, 0.9]
+  },
+  "physics": {
+    "dragCoefficient": 0.4,
+    "heatTolerance": 3000.0,
+    "impactTolerance": 10.0
+  },
+  "costs": {
+    "partCost": 2000,
+    "entryCost": 1000
+  },
+  "technology": {
+    "techRequired": "basicRocketry",
+    "entryCost": 1000
+  }
+}

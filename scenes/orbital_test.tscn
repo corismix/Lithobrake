@@ -3,6 +3,7 @@
 [ext_resource type="Script" path="res://src/Core/OrbitalTest.cs" id="1_orbital_test"]
 [ext_resource type="Script" path="res://src/Core/PhysicsManager.cs" id="2_physics_manager"]
 [ext_resource type="Script" path="res://src/Core/PerformanceMonitor.cs" id="3_performance_monitor"]
+[ext_resource type="Script" path="res://src/Core/Orbital/KeplerTests.cs" id="4_kepler_tests"]
 
 [node name="OrbitalTest" type="Node3D"]
 script = ExtResource("1_orbital_test")
@@ -12,6 +13,9 @@ script = ExtResource("2_physics_manager")
 
 [node name="PerformanceMonitor" type="Node3D" parent="."]
 script = ExtResource("3_performance_monitor")
+
+[node name="KeplerTests" type="Node" parent="."]
+script = ExtResource("4_kepler_tests")
 
 [node name="UI" type="Control" parent="."]
 layout_mode = 3
@@ -28,10 +32,11 @@ offset_left = 10.0
 offset_top = -60.0
 offset_right = 500.0
 offset_bottom = -10.0
-text = "Orbital Mechanics Test
-- Testing 100km circular orbit stability
-- Validating <1% drift over 10 orbits  
-- Performance targets: <0.1ms orbital calc, <0.05ms coord conversion"
+text = "Orbital Mechanics Test with Centralized Kepler Solver
+- Testing 100km circular orbit stability with centralized solver
+- Validating <1% drift over 10 orbits using Newton-Raphson methods
+- Performance targets: <0.05ms Kepler solve, <0.1ms position/velocity
+- Energy conservation: <1e-12 relative error over extended periods"
 vertical_alignment = 1
 
 [node name="Camera3D" type="Camera3D" parent="."]

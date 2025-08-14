@@ -9,8 +9,9 @@ namespace Lithobrake.Core
     /// Multi-part vessel physics handler for rocket simulation.
     /// Manages parts list, joints, mass properties, and vessel lifecycle.
     /// Integrates with Double3 coordinate system for orbital mechanics.
+    /// Supports floating origin system for precision preservation.
     /// </summary>
-    public partial class PhysicsVessel : Node3D
+    public partial class PhysicsVessel : Node3D, IOriginShiftAware
     {
         // Vessel identification
         private int _vesselId;
@@ -62,6 +63,9 @@ namespace Lithobrake.Core
         private double _orbitalCalculationTime = 0.0;
         private const double OrbitalCalculationBudget = 0.5; // ms per frame from task requirements
         
+        // Floating origin system integration
+        private bool _isOriginShiftRegistered = false;
+        
         public override void _Ready()
         {
             GD.Print($"PhysicsVessel: Node ready, waiting for initialization");
@@ -85,7 +89,10 @@ namespace Lithobrake.Core
             _isOnRails = false;
             _lastOrbitalUpdate = Time.GetUnixTimeFromSystem();
             
-            GD.Print($"PhysicsVessel {_vesselId}: Initialized with anti-wobble and orbital mechanics systems");
+            // Register with floating origin system
+            FloatingOriginManager.RegisterOriginShiftAware(this);
+            
+            GD.Print($"PhysicsVessel {_vesselId}: Initialized with anti-wobble, orbital mechanics, and floating origin systems");
         }
         
         /// <summary>
@@ -737,6 +744,12 @@ namespace Lithobrake.Core
         {
             _isActive = false;
             
+            // Unregister from floating origin system
+            if (_isOriginShiftRegistered)
+            {
+                FloatingOriginManager.UnregisterOriginShiftAware(this);
+            }
+            
             // Clean up anti-wobble system
             _antiWobbleSystem?.Reset();
             
@@ -928,6 +941,95 @@ namespace Lithobrake.Core
             
             return (altitude, velocity, period, inAtmosphere);
         }
+        
+        #region IOriginShiftAware Implementation
+        
+        /// <summary>
+        /// Handle floating origin shift by updating vessel and part positions
+        /// </summary>
+        /// <param name="deltaPosition">The coordinate shift amount to apply</param>
+        public void HandleOriginShift(Double3 deltaPosition)
+        {
+            if (!_isActive)
+                return;
+            
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            
+            try
+            {
+                // Update vessel position
+                _position += deltaPosition;
+                
+                // Update center of mass
+                _centerOfMass += deltaPosition;
+                
+                // Update orbital state if valid
+                if (_orbitalStateValid && _orbitalState.HasValue)
+                {
+                    // The orbital mechanics position is relative to the celestial body,
+                    // so we need to update the reference frame
+                    var currentOrbitalState = _orbitalState.Value;
+                    
+                    // Update the epoch position to account for the coordinate shift
+                    // This maintains the orbital mechanics accuracy across origin shifts
+                    Double3 relativePosition = _position - _primaryBody.Position;
+                    _orbitalState = OrbitalState.FromCartesian(relativePosition, _velocity, 
+                                                              _lastOrbitalUpdate, 
+                                                              _primaryBody.GravitationalParameter);
+                }
+                
+                // Update all part positions
+                foreach (var part in _parts)
+                {
+                    if (!part.IsActive || part.RigidBody == null || !GodotObject.IsInstanceValid(part.RigidBody))
+                        continue;
+                    
+                    // Update part positions by the delta amount
+                    var currentPos = Double3.FromVector3(part.RigidBody.GlobalPosition);
+                    var newPos = currentPos + deltaPosition;
+                    part.RigidBody.GlobalPosition = newPos.ToVector3();
+                    
+                    // Update local position as well
+                    part.LocalPosition += deltaPosition;
+                }
+                
+                // Monitor distance for future origin shifts
+                FloatingOriginManager.MonitorOriginDistance(_position);
+                
+                stopwatch.Stop();
+                double shiftTime = stopwatch.Elapsed.TotalMilliseconds;
+                
+                if (shiftTime > 0.1) // 0.1ms target per vessel
+                {
+                    GD.PrintErr($"PhysicsVessel {_vesselId}: Origin shift handling took {shiftTime:F3}ms (target: 0.1ms)");
+                }
+            }
+            catch (Exception ex)
+            {
+                GD.PrintErr($"PhysicsVessel {_vesselId}: Error handling origin shift: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Whether this vessel is registered for origin shift notifications
+        /// </summary>
+        public bool IsRegistered
+        {
+            get => _isOriginShiftRegistered;
+            set => _isOriginShiftRegistered = value;
+        }
+        
+        /// <summary>
+        /// Priority for origin shift notifications (vessels are important systems)
+        /// </summary>
+        public int ShiftPriority => OriginShiftPriority.Important;
+        
+        /// <summary>
+        /// Whether this vessel should receive origin shift notifications
+        /// </summary>
+        public bool ShouldReceiveOriginShifts => IsRegistered && _isActive;
+        
+        #endregion
     }
     
     /// <summary>

@@ -1,0 +1,48 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/Core/Orbital/KeplerTests.cs" id="1"]
+
+[node name="KeplerTest" type="Node"]
+script = ExtResource("1")
+
+[node name="UI" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="Title" type="Label" parent="UI"]
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -400.0
+offset_top = 20.0
+offset_right = -20.0
+offset_bottom = 60.0
+text = "Kepler Solver Test Suite"
+horizontal_alignment = 2
+vertical_alignment = 1
+
+[node name="Instructions" type="RichTextLabel" parent="UI"]
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 20.0
+offset_top = -150.0
+offset_right = 500.0
+offset_bottom = -20.0
+bbcode_enabled = true
+text = "[b]Kepler Solver Validation[/b]
+Tests running automatically on scene load.
+Check console output for detailed results.
+
+[color=green]✓[/color] Elliptical orbits (e < 1)
+[color=green]✓[/color] Hyperbolic orbits (e ≥ 1)  
+[color=green]✓[/color] Edge cases (circular, parabolic)
+[color=green]✓[/color] Energy conservation
+[color=green]✓[/color] Performance benchmarks
+
+Target: <0.05ms per solve operation
+Tolerance: 1e-10 convergence"

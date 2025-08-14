@@ -1,0 +1,51 @@
+{
+  "partId": "command-pod",
+  "name": "Mk1 Command Pod",
+  "description": "A basic command pod capable of housing one crew member and providing vessel control authority. Contains life support systems and flight computers.",
+  "type": "Command",
+  "mass": {
+    "dryMass": 100.0,
+    "fuelMass": 0.0
+  },
+  "dimensions": {
+    "width": 2.0,
+    "height": 2.0,
+    "depth": 2.0
+  },
+  "command": {
+    "crewCapacity": 1,
+    "electricCharge": 50.0,
+    "electricChargeMax": 50.0,
+    "hasSAS": true,
+    "sasAuthorityLevel": 5.0,
+    "electricalConsumption": 1.0,
+    "sasConsumption": 0.2
+  },
+  "attachmentNodes": {
+    "bottom": {
+      "position": [0, -1.0, 0],
+      "orientation": [0, -1, 0],
+      "type": "Stack",
+      "size": "Size1",
+      "maxMass": 5000.0
+    }
+  },
+  "resources": {
+    "meshPath": "res://resources/parts/meshes/command-pod.obj",
+    "texturePath": "res://resources/parts/textures/command-pod.png",
+    "materialPath": "res://resources/parts/materials/command-pod.tres"
+  },
+  "physics": {
+    "dragCoefficient": 0.8,
+    "heatTolerance": 2000.0,
+    "impactTolerance": 15.0
+  },
+  "costs": {
+    "partCost": 1500,
+    "entryCost": 0
+  },
+  "technology": {
+    "techRequired": "basicRocketry",
+    "entryCost": 0
+  }
+}

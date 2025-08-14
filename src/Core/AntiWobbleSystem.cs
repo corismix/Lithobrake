@@ -272,6 +272,36 @@ namespace Lithobrake.Core
         }
         
         /// <summary>
+        /// Ensure anti-wobble system maintains stability across floating origin shifts.
+        /// The anti-wobble system primarily operates through joint stiffness modifications
+        /// which are handled by the PhysicsVessel during origin shifts.
+        /// </summary>
+        /// <param name="vessel">The vessel being processed</param>
+        /// <param name="deltaPosition">The origin shift delta (not directly used)</param>
+        public void HandleOriginShift(PhysicsVessel vessel, Double3 deltaPosition)
+        {
+            // The anti-wobble system doesn't need to directly handle coordinate shifts
+            // since it works through joint tuning parameters that are maintained by 
+            // the PhysicsVessel during origin shifts.
+            
+            // However, we can validate that our state remains consistent
+            var vesselJoints = GetVesselJoints(vessel);
+            var activeJointIds = vesselJoints.Select(j => j.Id).ToHashSet();
+            
+            // Clean up any stale joint stiffness states
+            var staleStiffnessIds = _jointStiffness.Keys.Where(id => !activeJointIds.Contains(id)).ToList();
+            foreach (var staleId in staleStiffnessIds)
+            {
+                _jointStiffness.Remove(staleId);
+            }
+            
+            // Virtual struts maintain their relative positioning automatically
+            // since they reference part IDs, not absolute coordinates
+            
+            GD.Print($"AntiWobble: Maintained stability across origin shift (delta: {deltaPosition.Length:F1}m)");
+        }
+        
+        /// <summary>
         /// Get performance metrics
         /// </summary>
         public AntiWobbleMetrics GetMetrics()
