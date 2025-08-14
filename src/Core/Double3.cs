@@ -50,6 +50,65 @@ namespace Lithobrake.Core
                 destination[i] = FromVector3(source[i]);
             }
         }
+        
+        // Optimized conversion methods for minimal overhead
+        /// <summary>
+        /// Fast conversion with pre-allocated arrays to minimize GC pressure
+        /// </summary>
+        public static void FastConvertToVector3Array(Double3[] source, Vector3[] destination, int startIndex, int count)
+        {
+            int endIndex = startIndex + count;
+            for (int i = startIndex; i < endIndex; i++)
+            {
+                var src = source[i];
+                destination[i] = new Vector3((float)src.X, (float)src.Y, (float)src.Z);
+            }
+        }
+        
+        /// <summary>
+        /// In-place conversion avoiding temporary allocations
+        /// </summary>
+        public static unsafe void UnsafeConvertToVector3Array(Double3[] source, Vector3[] destination, int count)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                ref var src = ref source[i];
+                destination[i] = new Vector3((float)src.X, (float)src.Y, (float)src.Z);
+            }
+        }
+        
+        /// <summary>
+        /// Benchmark conversion performance for target <0.1ms per 1000 operations
+        /// </summary>
+        public static double BenchmarkConversions(int iterations = 1000)
+        {
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            var double3Array = new Double3[iterations];
+            var vector3Array = new Vector3[iterations];
+            
+            // Initialize with orbital-scale values
+            var random = new Random(42);
+            for (int i = 0; i < iterations; i++)
+            {
+                double3Array[i] = new Double3(
+                    random.NextDouble() * 1000000,  // Large orbital distances
+                    random.NextDouble() * 1000000,
+                    random.NextDouble() * 1000000
+                );
+            }
+            
+            stopwatch.Restart();
+            
+            // Test round-trip conversions
+            for (int i = 0; i < iterations; i++)
+            {
+                vector3Array[i] = double3Array[i].ToVector3();
+                double3Array[i] = FromVector3(vector3Array[i]);
+            }
+            
+            stopwatch.Stop();
+            return stopwatch.Elapsed.TotalMilliseconds;
+        }
 
         // Arithmetic operators
         public static Double3 operator +(Double3 a, Double3 b) => new Double3(a.X + b.X, a.Y + b.Y, a.Z + b.Z);
@@ -66,6 +125,50 @@ namespace Lithobrake.Core
             a.Z * b.X - a.X * b.Z,
             a.X * b.Y - a.Y * b.X
         );
+
+        // Orbital mechanics utilities
+        public static double Distance(Double3 a, Double3 b) => (a - b).Length;
+        public static Double3 Lerp(Double3 a, Double3 b, double t) => a + (b - a) * t;
+        public static Double3 Project(Double3 vector, Double3 onNormal) => onNormal * (Dot(vector, onNormal) / onNormal.LengthSquared);
+        public static Double3 Reflect(Double3 vector, Double3 normal) => vector - 2 * Project(vector, normal);
+        
+        /// <summary>
+        /// Calculate orbital velocity magnitude at given radius for circular orbit
+        /// </summary>
+        public static double CircularVelocity(double radius, double gravitationalParameter)
+        {
+            return Math.Sqrt(gravitationalParameter / radius);
+        }
+        
+        /// <summary>
+        /// Calculate specific orbital energy (energy per unit mass)
+        /// </summary>
+        public static double SpecificOrbitalEnergy(Double3 position, Double3 velocity, double gravitationalParameter)
+        {
+            double r = position.Length;
+            double v = velocity.Length;
+            return (v * v) / 2 - gravitationalParameter / r;
+        }
+        
+        /// <summary>
+        /// Calculate angular momentum vector for orbital mechanics
+        /// </summary>
+        public static Double3 AngularMomentum(Double3 position, Double3 velocity)
+        {
+            return Cross(position, velocity);
+        }
+        
+        /// <summary>
+        /// Calculate eccentricity vector for orbital mechanics
+        /// </summary>
+        public static Double3 EccentricityVector(Double3 position, Double3 velocity, double gravitationalParameter)
+        {
+            double r = position.Length;
+            double v_squared = velocity.LengthSquared;
+            Double3 h = AngularMomentum(position, velocity);
+            
+            return (Cross(velocity, h) / gravitationalParameter) - (position / r);
+        }
 
         // Equality and comparison
         public bool Equals(Double3 other) => X == other.X && Y == other.Y && Z == other.Z;

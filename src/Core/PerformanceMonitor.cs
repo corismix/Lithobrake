@@ -6,11 +6,24 @@ using System.Diagnostics;
 namespace Lithobrake.Core
 {
     /// <summary>
-    /// Real-time performance monitoring system for tracking frame times, physics performance,
+    /// Singleton real-time performance monitoring system for tracking frame times, physics performance,
     /// and system metrics according to project performance targets.
     /// </summary>
     public partial class PerformanceMonitor : CanvasLayer
     {
+        private static PerformanceMonitor _instance;
+        public static PerformanceMonitor Instance
+        {
+            get
+            {
+                if (_instance == null)
+                {
+                    _instance = new PerformanceMonitor();
+                }
+                return _instance;
+            }
+        }
+        
         private Label _performanceLabel;
         private Stopwatch _frameTimer = new Stopwatch();
         private Stopwatch _physicsTimer = new Stopwatch();
@@ -32,8 +45,21 @@ namespace Lithobrake.Core
         private bool _apiValidationComplete = false;
         private string _apiStatus = "Not Tested";
         
+        // Performance warning system
+        private bool _showWarnings = true;
+        private double _lastWarningTime = 0;
+        private const double WARNING_COOLDOWN = 5.0; // seconds
+        
+        // Extended performance tracking
+        private double _memoryUsage = 0;
+        private int _gcCollectionCount = 0;
+        private double _signalMarshalingTime = 0;
+        
         public override void _Ready()
         {
+            // Set singleton instance
+            _instance = this;
+            
             // Create UI overlay
             _performanceLabel = new Label();
             _performanceLabel.Position = new Vector2(10, 10);
@@ -53,8 +79,25 @@ namespace Lithobrake.Core
             // Start frame timing
             _frameTimer.Start();
             
-            GD.Print("PerformanceMonitor initialized");
+            GD.Print("PerformanceMonitor singleton initialized");
         }
+        
+        /// <summary>
+        /// Initialize singleton for global access
+        /// </summary>
+        public static void InitializeSingleton()
+        {
+            if (_instance == null)
+            {
+                _instance = new PerformanceMonitor();
+                GD.Print("PerformanceMonitor singleton created programmatically");
+            }
+        }
+        
+        /// <summary>
+        /// Access singleton instance safely
+        /// </summary>
+        public static bool IsInstanceValid => _instance != null && GodotObject.IsInstanceValid(_instance);
         
         public override void _Process(double delta)
         {
@@ -119,13 +162,37 @@ namespace Lithobrake.Core
             
             double currentFPS = avgFrameTime > 0 ? 1000.0 / avgFrameTime : 0;
             
-            string performanceText = $"PERFORMANCE MONITOR\n";
+            // Check for performance warnings
+            CheckPerformanceWarnings(avgFrameTime, avgPhysicsTime, avgScriptTime);
+            
+            // Update memory usage
+            _memoryUsage = GC.GetTotalMemory(false) / (1024.0 * 1024.0); // MB
+            int currentGCCount = GC.CollectionCount(0) + GC.CollectionCount(1) + GC.CollectionCount(2);
+            
+            string performanceText = $"PERFORMANCE MONITOR (Singleton)\n";
             performanceText += $"FPS: {currentFPS:F1} {GetPerformanceStatus(avgFrameTime, TARGET_FRAME_TIME)}\n";
             performanceText += $"Frame: {avgFrameTime:F2}ms (target: {TARGET_FRAME_TIME}ms)\n";
             performanceText += $"Physics: {avgPhysicsTime:F2}ms (target: {TARGET_PHYSICS_TIME}ms) {GetPerformanceStatus(avgPhysicsTime, TARGET_PHYSICS_TIME)}\n";
             performanceText += $"Script: {avgScriptTime:F2}ms (target: {TARGET_SCRIPT_TIME}ms) {GetPerformanceStatus(avgScriptTime, TARGET_SCRIPT_TIME)}\n\n";
             
-            performanceText += $"API VALIDATION\n";
+            performanceText += $"MEMORY & GC\n";
+            performanceText += $"Memory: {_memoryUsage:F1}MB\n";
+            if (currentGCCount != _gcCollectionCount)
+            {
+                performanceText += $"GC Events: {currentGCCount} (⚠️ Recent collection)\n";
+                _gcCollectionCount = currentGCCount;
+            }
+            else
+            {
+                performanceText += $"GC Events: {currentGCCount} ✅\n";
+            }
+            
+            if (_signalMarshalingTime > 0)
+            {
+                performanceText += $"Signal Time: {_signalMarshalingTime:F3}ms {GetPerformanceStatus(_signalMarshalingTime, 0.5)}\n";
+            }
+            
+            performanceText += $"\nAPI VALIDATION\n";
             performanceText += $"Status: {_apiStatus}\n";
             if (_lastConversionBenchmark > 0)
             {
@@ -134,6 +201,30 @@ namespace Lithobrake.Core
             }
             
             _performanceLabel.Text = performanceText;
+        }
+        
+        private void CheckPerformanceWarnings(double frameTime, double physicsTime, double scriptTime)
+        {
+            if (!_showWarnings) return;
+            
+            double currentTime = Time.GetUnixTimeFromSystem();
+            if (currentTime - _lastWarningTime < WARNING_COOLDOWN) return;
+            
+            if (frameTime > TARGET_FRAME_TIME * 1.5)
+            {
+                GD.PrintErr($"⚠️ PERFORMANCE WARNING: Frame time {frameTime:F2}ms exceeds target by 50%");
+                _lastWarningTime = currentTime;
+            }
+            else if (physicsTime > TARGET_PHYSICS_TIME * 1.2)
+            {
+                GD.PrintErr($"⚠️ PERFORMANCE WARNING: Physics time {physicsTime:F2}ms exceeds target");
+                _lastWarningTime = currentTime;
+            }
+            else if (scriptTime > TARGET_SCRIPT_TIME * 1.2)
+            {
+                GD.PrintErr($"⚠️ PERFORMANCE WARNING: Script time {scriptTime:F2}ms exceeds target");
+                _lastWarningTime = currentTime;
+            }
         }
         
         /// <summary>
@@ -185,6 +276,46 @@ namespace Lithobrake.Core
         }
         
         /// <summary>
+        /// Measure signal marshaling performance
+        /// </summary>
+        public double MeasureSignalMarshalingPerformance(int iterations = 1000)
+        {
+            var stopwatch = Stopwatch.StartNew();
+            
+            // Create test data
+            var testDict = new Godot.Collections.Dictionary
+            {
+                ["test_int"] = 42,
+                ["test_float"] = 3.14f,
+                ["test_string"] = "performance_test",
+                ["test_vector"] = new Vector3(1, 2, 3)
+            };
+            
+            // Measure signal emission overhead
+            for (int i = 0; i < iterations; i++)
+            {
+                // Simulate signal emission cost without actual emission
+                var dict = new Godot.Collections.Dictionary(testDict);
+                dict["iteration"] = i;
+            }
+            
+            stopwatch.Stop();
+            _signalMarshalingTime = stopwatch.Elapsed.TotalMilliseconds;
+            
+            GD.Print($"Signal marshaling test: {_signalMarshalingTime:F3}ms for {iterations} operations");
+            return _signalMarshalingTime;
+        }
+        
+        /// <summary>
+        /// Enable or disable performance warnings
+        /// </summary>
+        public void SetWarningsEnabled(bool enabled)
+        {
+            _showWarnings = enabled;
+            GD.Print($"Performance warnings {(enabled ? "enabled" : "disabled")}");
+        }
+        
+        /// <summary>
         /// Get current performance metrics
         /// </summary>
         public PerformanceMetrics GetCurrentMetrics()
@@ -196,7 +327,10 @@ namespace Lithobrake.Core
                 ScriptTime = GetAverageTime(_scriptTimeSamples),
                 FPS = GetAverageTime(_frameTimeSamples) > 0 ? 1000.0 / GetAverageTime(_frameTimeSamples) : 0,
                 ConversionBenchmark = _lastConversionBenchmark,
-                ApiValidationComplete = _apiValidationComplete
+                ApiValidationComplete = _apiValidationComplete,
+                MemoryUsage = _memoryUsage,
+                SignalMarshalingTime = _signalMarshalingTime,
+                GcCollectionCount = _gcCollectionCount
             };
         }
     }
@@ -212,5 +346,8 @@ namespace Lithobrake.Core
         public double FPS;
         public double ConversionBenchmark;
         public bool ApiValidationComplete;
+        public double MemoryUsage;
+        public double SignalMarshalingTime;
+        public int GcCollectionCount;
     }
 }

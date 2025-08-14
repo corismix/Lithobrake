@@ -1,100 +1,111 @@
-# Current Task: Setup C#/GDScript Integration Foundation
+# Current Task: Configure Godot Project Structure and C# Compilation Environment
 
 ## Task Overview
 
-**Task 1 from implementation plan**: Setup C#/GDScript integration foundation and validate performance characteristics
+**Task 2 from implementation plan**: Configure Godot project structure and C# compilation environment
 
-This task builds on the API validation to create a working foundation for C# and GDScript integration with proper performance monitoring and boundaries.
+This task establishes the proper project structure, configuration files, and development environment needed for the C# rocket simulation, building on the established C#/GDScript integration foundation.
 
 ## Implementation Steps
 
-### 1. Create C# Test Node
-- Create C# test node inheriting from Node3D with basic Update() method
-- Implement basic lifecycle methods (_Ready, _Process, _PhysicsProcess)
-- Test node registration and signal connectivity
+### 1. Verify Installation Requirements
+- Verify Godot 4.4.1 and .NET 8.0 SDK installation with C# support enabled
+- Confirm Metal renderer is available and configured on macOS M4 hardware
+- Validate Jolt physics engine availability in Godot 4.4.1
 
-### 2. Implement Double3 Integration
-- Extend existing Double3 struct with additional orbital calculation utilities
-- Add conversion utilities optimized for frequent Godot.Vector3 conversion
-- Validate conversion performance meets <0.1ms per 1000 operations target
+### 2. Create Directory Structure
+- Create directory structure: `src/Core/`, `src/Scripts/`, `scenes/`, `resources/parts/`, `resources/materials/`
+- Organize existing files into proper structure
+- Ensure proper separation of C# (Core) and GDScript (Scripts) code
 
-### 3. Build PerformanceMonitor Singleton
-- Convert existing PerformanceMonitor to singleton pattern
-- Add overlay display for real-time performance tracking
-- Track frame time, physics time, script time with visual indicators
-- Implement performance warning system when targets exceeded
+### 3. Configure Project Settings
+- Configure `project.godot` settings for Metal renderer, 60Hz physics, Jolt engine
+- Set assembly name to 'Lithobrake' for C# compilation
+- Configure rendering and physics settings for MacBook Air M4 performance
+- Enable C# debugging and proper build configuration
 
-### 4. Test Signal Marshaling Performance
-- Create test scenarios for C# to GDScript signal communication at 60Hz
-- Measure overhead of different signal payload types
-- Document performance characteristics and establish boundaries
-- Validate packed signal approach for UI communication
+### 4. Setup C# Project Configuration
+- Create and configure `.csproj` file with `Godot.NET.Sdk/4.4.1` and `net8.0` target framework
+- Configure proper C# project settings for Godot integration
+- Setup build configurations for debug and release modes
+- Validate C# compilation pipeline works correctly
 
-### 5. Validate Memory Management
-- Implement object pooling patterns if needed for performance
-- Test C# garbage collection impact on frame timing
-- Measure memory allocation patterns during typical operations
-- Document memory management best practices
+### 5. Create Development Infrastructure
+- Setup `.gitignore` for Godot/C# artifacts including `.godot/`, `bin/`, `obj/`, mono crash patterns
+- Create proper project structure documentation
+- Setup development workflow files and configurations
 
-### 6. Document UI Performance Boundaries
-- Establish rule: C# aggregates state, emits one packed signal per frame to GDScript
-- Create example implementation of this pattern
-- Measure and validate performance improvement vs. high-frequency signals
-- Document the performance boundary rules
+### 6. Create Technical Documentation
+- Create `COORDINATES.md` documentation for coordinate system specifications
+- Create `DETERMINISM.md` documentation for deterministic simulation requirements
+- Document project structure and development workflows
+- Update build and testing procedures
 
 ## Files to Create/Modify
 
-- `src/Core/CSharpTestNode.cs` - Basic C# Node3D implementation
-- Extend `src/Core/Double3.cs` - Add orbital calculation utilities  
-- Extend `src/Core/PerformanceMonitor.cs` - Convert to singleton, add overlay
-- `src/Scripts/UIBridge.gd` - GDScript UI bridge example
-- `test_scenes/integration_test.tscn` - Integration testing scene
-- `docs/PERFORMANCE_BOUNDARIES.md` - Document C#/GDScript performance rules
+- **Project Configuration**:
+  - `project.godot` - Update physics settings, renderer, assembly name
+  - `Lithobrake.csproj` - C# project configuration file
+  - `.gitignore` - Git ignore patterns for Godot/C# development
+  
+- **Directory Structure**:
+  - `resources/parts/` - Part definition storage directory
+  - `resources/materials/` - Shader and material resources directory
+  - `scenes/` - Scene file organization (move existing scenes)
+  
+- **Documentation**:
+  - `COORDINATES.md` - Coordinate system and transformation documentation
+  - `DETERMINISM.md` - Deterministic simulation requirements and validation
+
+- **File Organization**:
+  - Move existing files to proper directory structure
+  - Organize scenes into `scenes/` directory
+  - Ensure proper import and reference paths
 
 ## Success Criteria
 
-- [ ] C# test node successfully inherits from Node3D and integrates with scene tree
-- [ ] Double3 conversion utilities validated at <0.1ms per 1000 operations
-- [ ] PerformanceMonitor singleton provides real-time overlay display
-- [ ] Signal marshaling overhead measured and documented
-- [ ] Memory management patterns validated with no frame time impact
-- [ ] UI performance boundary documented with working example
-- [ ] Integration test scene runs at stable 60 FPS
+- [ ] Godot 4.4.1 and .NET 8.0 SDK verified and working with C# support
+- [ ] Proper directory structure created and existing files organized
+- [ ] Project.godot configured for Metal renderer, 60Hz physics, Jolt engine, assembly name 'Lithobrake'
+- [ ] C# project file (`.csproj`) created and configured with Godot.NET.Sdk/4.4.1 and net8.0
+- [ ] `.gitignore` file created with appropriate Godot/C# patterns
+- [ ] `COORDINATES.md` and `DETERMINISM.md` documentation created
+- [ ] C# compilation pipeline verified working correctly
+- [ ] Project builds successfully with `dotnet build` or Godot build systems
 
 ## Performance Targets
 
-- Frame time: ≤16.6ms (60 FPS) consistently
-- Physics time: ≤1ms for basic integration test
-- Script time: ≤1ms for minimal C# operations
-- Signal marshaling: <0.5ms overhead for packed signals
-- Memory allocation: No GC pressure causing frame drops
+- Build time: <10 seconds for clean build
+- Hot reload: <2 seconds for C# code changes
+- No degradation in runtime performance from Task 1 benchmarks
+- Maintain 60 FPS target with all configuration changes
 
 ## Requirements Fulfilled
 
-- **Requirement 1.1**: C# physics system foundation
-- **Requirement 1.2**: GDScript UI system integration  
-- **Requirement 1.3**: Performance monitoring implementation
-- **Requirement 1.4**: Memory management validation
-- **Requirement 1.5**: Type conversion overhead verification
-- **Requirement 1.6**: Signal marshaling performance
-- **Requirement 1.7**: Cross-language communication boundaries
+- **Requirement 1.1**: C# development environment setup
+- **Requirement 1.2**: Proper project structure for mixed C#/GDScript development
+- **Requirement 1.3**: Build system configuration and validation
+- **Requirement 1.4**: Development workflow documentation
+- **Requirement 1.5**: Git integration and artifact management
+- **Requirement 1.6**: Hardware-specific optimization (Metal renderer)
+- **Requirement 1.7**: Physics engine configuration (Jolt, 60Hz)
 
 ## Technical Notes
 
-From tasks-og.md:
-- C# handles performance-critical physics and orbital calculations
-- GDScript manages UI and non-performance-critical gameplay logic
-- Use singleton pattern for core systems (PhysicsManager, PerformanceMonitor)
-- Implement object pooling for frequently allocated objects
-- Signal frequency must be limited to maintain 60 FPS target
+From tasks.md:
+- Use Metal renderer for optimal performance on macOS M4 hardware
+- Configure 60Hz physics tick rate for deterministic simulation
+- Enable Jolt physics engine for improved performance and stability
+- Organize code with clear separation between C# (performance-critical) and GDScript (UI/gameplay)
+- Setup proper C# debugging and build configuration for development workflow
 
 ## Validation Commands
 
 After implementation:
-- "Run the integration test scene and show me the performance metrics"
-- "Test the C# to GDScript signal communication"
-- "Verify the Double3 conversion performance"
-- "Show me the memory allocation patterns"
+- "Build the project and show me the compilation results"
+- "Verify the project structure is properly organized"
+- "Test that Godot runs with the new configuration"
+- "Show me the .gitignore is working correctly"
 
 ## Post-Completion Actions
 
@@ -102,17 +113,17 @@ After successful validation, Claude Code should:
 
 1. **Update completed-tasks.md** with:
    ```markdown
-   ### Task 1: Setup C#/GDScript Integration Foundation
+   ### Task 2: Configure Godot Project Structure and C# Compilation Environment
    **Date**: [today's date]
    **Status**: ✅ Complete
    **Files Created**: [list files created]
-   **Performance**: [actual performance metrics]
+   **Configuration**: [configuration changes made]
    **Notes**: [any important observations]
    ```
 
-2. **Update current-task.md** with Task 2 from tasks.md:
-   - Copy "Task 2: Configure Godot project structure" from tasks.md
+2. **Update current-task.md** with Task 3 from tasks.md:
+   - Copy "Task 3: Implement core physics system with Jolt integration" from tasks.md
    - Add relevant technical details
    - Include success criteria and performance targets
 
-3. **Report to user**: "Task 1 complete. Next task is: Configure Godot project structure and C# compilation environment"
+3. **Report to user**: "Task 2 complete. Next task is: Implement core physics system with Jolt integration"

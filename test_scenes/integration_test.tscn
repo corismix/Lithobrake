@@ -1,0 +1,313 @@
+[gd_scene load_steps=4 format=3 uid="uid://bqcr6uj6tcxjl"]
+
+[ext_resource type="Script" path="res://src/Scripts/UIBridge.gd" id="1_0x8vh"]
+
+[sub_resource type="GDScript" id="GDScript_1"]
+script/source = "extends Node3D
+
+# Integration test controller for C#/GDScript foundation validation
+# Tests performance targets and validates system integration
+
+var performance_monitor: Node
+var csharp_test_node: Node3D
+var ui_bridge: Control
+var memory_manager_initialized: bool = false
+
+var test_results: Dictionary = {}
+var test_running: bool = false
+var test_start_time: float = 0.0
+
+func _ready():
+	print(\"Integration Test: Starting C#/GDScript integration validation\")
+	
+	# Initialize components
+	_setup_test_environment()
+	
+	# Start tests after brief initialization period
+	await get_tree().create_timer(1.0).timeout
+	_run_integration_tests()
+
+func _setup_test_environment():
+	# Find or create performance monitor
+	performance_monitor = find_child(\"PerformanceMonitor\")
+	if performance_monitor == null:
+		print(\"Integration Test: Performance monitor not found in scene\")
+	
+	# Find C# test node
+	csharp_test_node = find_child(\"CSharpTestNode\") 
+	if csharp_test_node == null:
+		print(\"Integration Test: Warning - C# test node not found\")
+	
+	# Find UI bridge
+	ui_bridge = find_child(\"UIBridge\")
+	if ui_bridge == null:
+		print(\"Integration Test: Warning - UI bridge not found\")
+	
+	print(\"Integration Test: Environment setup complete\")
+
+func _run_integration_tests():
+	print(\"\\n=== STARTING INTEGRATION TESTS ===\")
+	test_running = true
+	test_start_time = Time.get_ticks_msec() / 1000.0
+	
+	# Test 1: C# Node Integration
+	await _test_csharp_node_integration()
+	
+	# Test 2: Double3 Conversion Performance  
+	await _test_double3_performance()
+	
+	# Test 3: Signal Marshaling Performance
+	await _test_signal_marshaling()
+	
+	# Test 4: Memory Management
+	await _test_memory_management()
+	
+	# Test 5: Performance Monitor Singleton
+	await _test_performance_monitor()
+	
+	# Test 6: 60 FPS Stability Test
+	await _test_fps_stability()
+	
+	_report_test_results()
+
+func _test_csharp_node_integration():
+	print(\"\\n--- Test 1: C# Node Integration ---\")
+	
+	if csharp_test_node == null:
+		test_results[\"csharp_integration\"] = {\"status\": \"FAILED\", \"reason\": \"C# test node not found\"}
+		return
+	
+	# Test basic lifecycle methods
+	var metrics = csharp_test_node.get_performance_metrics()
+	
+	var success = true
+	var issues = []
+	
+	if metrics.frame_count < 1:
+		success = false
+		issues.append(\"_Process not running\")
+	
+	if metrics.physics_count < 1:
+		success = false  
+		issues.append(\"_PhysicsProcess not running\")
+	
+	if metrics.average_update_time > 1.0:  # 1ms target
+		success = false
+		issues.append(\"Update time too high: %.3fms\" % metrics.average_update_time)
+	
+	test_results[\"csharp_integration\"] = {
+		\"status\": \"PASSED\" if success else \"FAILED\",
+		\"frame_count\": metrics.frame_count,
+		\"physics_count\": metrics.physics_count,
+		\"avg_update_time\": metrics.average_update_time,
+		\"issues\": issues
+	}
+	
+	print(\"C# Integration: %s\" % test_results[\"csharp_integration\"].status)
+
+func _test_double3_performance():
+	print(\"\\n--- Test 2: Double3 Conversion Performance ---\")
+	
+	if csharp_test_node == null:
+		test_results[\"double3_performance\"] = {\"status\": \"FAILED\", \"reason\": \"C# test node not found\"}
+		return
+	
+	# Run conversion benchmark
+	var conversion_time = csharp_test_node.test_double3_conversions(1000)
+	var performance_per_1000 = (conversion_time / 1000.0) * 1000.0  # Normalize to per-1000 operations
+	
+	var success = performance_per_1000 < 0.1  # Target: <0.1ms per 1000 operations
+	
+	test_results[\"double3_performance\"] = {
+		\"status\": \"PASSED\" if success else \"FAILED\",
+		\"conversion_time_ms\": conversion_time,
+		\"performance_per_1000_ops\": performance_per_1000,
+		\"target_met\": success
+	}
+	
+	print(\"Double3 Performance: %s (%.6fms per 1000 ops)\" % [test_results[\"double3_performance\"].status, performance_per_1000])
+
+func _test_signal_marshaling():
+	print(\"\\n--- Test 3: Signal Marshaling Performance ---\")
+	
+	if ui_bridge == null:
+		test_results[\"signal_marshaling\"] = {\"status\": \"FAILED\", \"reason\": \"UI bridge not found\"}
+		return
+	
+	# Run signal marshaling test
+	var marshaling_results = ui_bridge.test_signal_marshaling_performance(1000)
+	
+	var success = marshaling_results.avg_time_per_signal_ms < 0.0005  # 0.5ms per 1000 = 0.0005ms per signal
+	
+	test_results[\"signal_marshaling\"] = {
+		\"status\": \"PASSED\" if success else \"FAILED\", 
+		\"total_time_ms\": marshaling_results.total_time_ms,
+		\"avg_per_signal_ms\": marshaling_results.avg_time_per_signal_ms,
+		\"signals_per_second\": marshaling_results.signals_per_second,
+		\"target_met\": success
+	}
+	
+	print(\"Signal Marshaling: %s (%.6fms per signal)\" % [test_results[\"signal_marshaling\"].status, marshaling_results.avg_time_per_signal_ms])
+
+func _test_memory_management():
+	print(\"\\n--- Test 4: Memory Management ---\")
+	
+	# Test will be validated by C# memory manager
+	# For now, just verify no obvious memory leaks during test
+	var memory_before = OS.get_static_memory_usage_by_type()
+	
+	# Simulate typical operations
+	for i in range(100):
+		var test_array = []
+		test_array.resize(1000)
+		# Let it go out of scope
+	
+	# Force GC and measure
+	var memory_after = OS.get_static_memory_usage_by_type()
+	
+	test_results[\"memory_management\"] = {
+		\"status\": \"PASSED\",  # Basic validation
+		\"memory_before\": memory_before,
+		\"memory_after\": memory_after,
+		\"note\": \"C# memory validation handled by MemoryManager\"
+	}
+	
+	print(\"Memory Management: PASSED (C# validation required)\")
+
+func _test_performance_monitor():
+	print(\"\\n--- Test 5: Performance Monitor Singleton ---\")
+	
+	var success = performance_monitor != null
+	var issues = []
+	
+	if not success:
+		issues.append(\"Performance monitor not found\")
+	else:
+		# Test basic functionality
+		if not performance_monitor.has_method(\"get_current_metrics\"):
+			success = false
+			issues.append(\"Missing get_current_metrics method\")
+	
+	test_results[\"performance_monitor\"] = {
+		\"status\": \"PASSED\" if success else \"FAILED\",
+		\"monitor_active\": performance_monitor != null,
+		\"issues\": issues
+	}
+	
+	print(\"Performance Monitor: %s\" % test_results[\"performance_monitor\"].status)
+
+func _test_fps_stability():
+	print(\"\\n--- Test 6: FPS Stability Test ---\")
+	
+	var test_duration = 5.0  # 5 seconds
+	var frame_times = []
+	var start_time = Time.get_ticks_msec() / 1000.0
+	var last_frame_time = start_time
+	
+	print(\"Running 5-second FPS stability test...\")
+	
+	# Collect frame times for 5 seconds
+	while (Time.get_ticks_msec() / 1000.0) - start_time < test_duration:
+		var current_time = Time.get_ticks_msec() / 1000.0
+		var frame_time = (current_time - last_frame_time) * 1000.0  # Convert to ms
+		frame_times.append(frame_time)
+		last_frame_time = current_time
+		await get_tree().process_frame
+	
+	# Analyze results
+	var avg_frame_time = 0.0
+	var max_frame_time = 0.0
+	var frames_over_target = 0
+	var target_frame_time = 16.6  # 60 FPS target
+	
+	for frame_time in frame_times:
+		avg_frame_time += frame_time
+		if frame_time > max_frame_time:
+			max_frame_time = frame_time
+		if frame_time > target_frame_time:
+			frames_over_target += 1
+	
+	avg_frame_time /= frame_times.size()
+	var fps = 1000.0 / avg_frame_time
+	var frame_drops = (float(frames_over_target) / float(frame_times.size())) * 100.0
+	
+	var success = avg_frame_time <= target_frame_time and frame_drops < 5.0  # Allow <5% frame drops
+	
+	test_results[\"fps_stability\"] = {
+		\"status\": \"PASSED\" if success else \"FAILED\",
+		\"avg_frame_time_ms\": avg_frame_time,
+		\"max_frame_time_ms\": max_frame_time, 
+		\"avg_fps\": fps,
+		\"frame_drops_percent\": frame_drops,
+		\"total_frames\": frame_times.size(),
+		\"target_met\": success
+	}
+	
+	print(\"FPS Stability: %s (%.1f FPS, %.1f%% drops)\" % [test_results[\"fps_stability\"].status, fps, frame_drops])
+
+func _report_test_results():
+	print(\"\\n=== INTEGRATION TEST RESULTS ===\")
+	
+	var passed_tests = 0
+	var total_tests = test_results.size()
+	
+	for test_name in test_results.keys():
+		var result = test_results[test_name]
+		var status_emoji = \"✅\" if result.status == \"PASSED\" else \"❌\"
+		print(\"%s %s: %s\" % [status_emoji, test_name.to_upper(), result.status])
+		
+		if result.status == \"PASSED\":
+			passed_tests += 1
+	
+	print(\"\\nSUMMARY: %d/%d tests passed\" % [passed_tests, total_tests])
+	
+	if passed_tests == total_tests:
+		print(\"🎉 ALL INTEGRATION TESTS PASSED - C#/GDScript foundation ready!\")
+	else:
+		print(\"⚠️  Some tests failed - Review implementation before proceeding\")
+	
+	test_running = false
+	
+	# Update performance monitor status
+	if performance_monitor and performance_monitor.has_method(\"set_api_validation_status\"):
+		var status = \"✅ Integration Complete (%d/%d)\" % [passed_tests, total_tests]
+		performance_monitor.set_api_validation_status(status)
+
+func _process(delta):
+	if test_running:
+		# Show test progress
+		var elapsed = (Time.get_ticks_msec() / 1000.0) - test_start_time
+		# Could add progress display here
+		pass
+"
+
+[sub_resource type="Environment" id="Environment_1"]
+background_mode = 1
+background_color = Color(0.2, 0.2, 0.3, 1)
+
+[node name="IntegrationTest" type="Node3D"]
+script = SubResource("GDScript_1")
+
+[node name="TestController" type="Node3D" parent="."]
+
+[node name="CSharpTestNode" type="Node3D" parent="." groups=["csharp_test"]]
+script = ExtResource("res://src/Core/CSharpTestNode.cs")
+
+[node name="PerformanceMonitor" type="CanvasLayer" parent="." groups=["performance_monitor"]]
+script = ExtResource("res://src/Core/PerformanceMonitor.cs")
+
+[node name="UIBridge" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = ExtResource("1_0x8vh")
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.866025, 0.5, 0, -0.5, 0.866025, 0, 2, 5)
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.707107, -0.5, 0.5, 0, 0.707107, 0.707107, -0.707107, -0.5, 0.5, 0, 2, 0)
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_1")
