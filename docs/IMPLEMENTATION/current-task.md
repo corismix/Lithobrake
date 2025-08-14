@@ -1,126 +1,129 @@
-# Current Task: Implement double-precision orbital mechanics system
+# Current Task: Build centralized Kepler orbit solver and propagation system
 
 ## Task Overview
 
-**Task 7 from implementation plan**: Implement double-precision orbital mechanics system
+**Task 8 from implementation plan**: Build centralized Kepler orbit solver and propagation system
 
-This task implements the core orbital mechanics system using double-precision calculations for accurate orbital state management. It creates the foundation for orbital propagation, gravity calculations, and coordinate transformations required for realistic space flight simulation.
+This task creates a centralized Kepler equation solver and orbital propagation system that handles both elliptical (e<1) and hyperbolic (e>=1) orbits. The system provides position and velocity calculations at any time using Newton-Raphson methods with high precision tolerance for accurate orbital mechanics simulation.
 
 ## Implementation Steps
 
-### 1. Create OrbitalState Structure
-- Create OrbitalState.cs struct with double precision orbital elements (semi-major axis, eccentricity, inclination, longitude of ascending node, argument of periapsis, mean anomaly)
-- Add epoch field for time-based orbital state tracking
-- Implement conversion methods between orbital elements and Cartesian state vectors
-- Handle orbital element singularities (circular orbits, equatorial orbits, etc.)
+### 1. Create Kepler Solver Module
+- Create `src/Core/Orbital/Kepler.cs` as centralized Kepler equation solver
+- Implement SolveElliptic() method for elliptical orbits (e<1) using Newton-Raphson with 1e-10 tolerance
+- Implement SolveHyperbolic() method for hyperbolic orbits (e>=1) using Newton-Raphson with 1e-10 tolerance  
+- Add maximum 16 iterations limit for both methods with convergence validation
+- Handle edge cases for circular orbits (e≈0) and parabolic trajectories (e≈1)
 
-### 2. Build CelestialBody System
-- Create CelestialBody.cs with homeworld constants from UNIVERSE_CONSTANTS.cs
-- Implement Kerbin-scale parameters: 600km radius, GM=3.5316e12 m³/s²
-- Add gravitational parameter storage and access methods
-- Create surface radius and atmospheric boundary definitions
+### 2. Implement Position and Velocity Calculation
+- Add GetPositionAtTime() method that solves Kepler's equation and converts to Cartesian coordinates
+- Create GetVelocityAtTime() method using vis-viva equation for velocity magnitude calculation
+- Implement proper coordinate transformations from orbital plane to inertial frame
+- Handle time propagation with mean motion calculations and epoch management
 
-### 3. Implement Gravity Calculation System
-- Build gravity calculation using F=GMm/r² for physics forces when off-rails
-- Implement orbital propagation for on-rails time warp scenarios
-- Create efficient gravity field calculation for multiple vessels
-- Add gravitational acceleration computation for physics integration
+### 3. Create Trajectory Sampling System
+- Implement adaptive sampling for trajectory visualization: dense points near Pe/Ap, sparse elsewhere
+- Create efficient sampling algorithm that adjusts density based on true anomaly and eccentricity
+- Add trajectory point generation for rendering orbital paths and maneuver planning
+- Optimize sampling performance for real-time trajectory updates
 
-### 4. Create Coordinate Transformation System
-- Implement transformation methods between orbital elements and Cartesian coordinates
-- Handle singularity cases for circular and equatorial orbits
-- Create position and velocity calculation from orbital elements at any time
-- Implement vis-viva equation for velocity magnitude calculation
+### 4. Add Energy Conservation Validation
+- Implement energy conservation checks for orbital propagation accuracy
+- Create validation methods to verify total energy remains constant during propagation
+- Add debugging utilities for orbital mechanics validation and troubleshooting
+- Include performance monitoring for Kepler solver execution times
 
-### 5. Test Orbital Stability and Accuracy
-- Test stable 100km circular orbit maintains accuracy over time
-- Validate <1% orbital drift over 10 complete orbits
-- Test various orbital eccentricities and inclinations
-- Measure performance impact of orbital calculations
+### 5. Create Comprehensive Unit Tests
+- Build unit tests for elliptical orbit branch with various eccentricities (0 to 0.99)
+- Create hyperbolic orbit tests with eccentricities from 1.01 to 5.0
+- Test edge cases: circular orbits, parabolic trajectories, high eccentricity ellipses
+- Validate energy conservation over extended time periods
 
 ## Files to Create/Modify
 
-- **Core Orbital System**:
-  - Create `src/Core/OrbitalState.cs` - Double precision orbital elements structure with epoch tracking (new file)
-  - Create `src/Core/CelestialBody.cs` - Celestial body definition with homeworld constants (new file)
-  - Create `src/Core/UNIVERSE_CONSTANTS.cs` - Central constants definition for all celestial parameters (new file)
+- **Core Kepler System**:
+  - Create `src/Core/Orbital/` directory for orbital mechanics modules (new directory)
+  - Create `src/Core/Orbital/Kepler.cs` - Centralized Kepler equation solver with Newton-Raphson methods (new file)
   
 - **Integration**:
-  - Enhance `src/Core/PhysicsVessel.cs` - Add orbital state integration and gravity calculation support
-  - Update `src/Core/Double3.cs` - Add additional orbital mechanics utility methods if needed
+  - Enhance `src/Core/OrbitalState.cs` - Integrate with centralized Kepler solver instead of embedded solver
+  - Update `src/Core/CelestialBody.cs` - Add trajectory sampling and visualization support if needed
   
-- **Test Scenes**:
-  - Create `scenes/orbital_test.tscn` - Orbital mechanics testing scene with 100km circular orbit validation
-  - Update existing test scenes for orbital integration validation
+- **Test Infrastructure**:
+  - Create `src/Core/Orbital/KeplerTests.cs` - Unit tests for Kepler solver validation (new file)
+  - Update `scenes/orbital_test.tscn` - Add Kepler solver validation to existing orbital tests
+  - Create `scenes/kepler_test.tscn` - Specialized Kepler solver testing scene (new file)
 
 ## Success Criteria
 
-- [x] OrbitalState struct with double precision orbital elements and epoch field
-- [x] CelestialBody with homeworld constants: 600km radius, GM=3.5316e12 from UNIVERSE_CONSTANTS.cs
-- [x] Gravity calculation with F=GMm/r² applied as physics force for off-rails, orbital propagation for on-rails
-- [x] Coordinate transformation methods between orbital elements and Cartesian coordinates with singularity handling
-- [x] Stable 100km circular orbit with <1% drift over 10 complete orbits
-- [x] Performance remains within physics budget (≤5ms total)
-- [x] Integration with existing PhysicsVessel and Double3 coordinate system
+- [ ] Centralized Kepler.cs with SolveElliptic() and SolveHyperbolic() methods using Newton-Raphson
+- [ ] 1e-10 tolerance and maximum 16 iterations for both elliptical and hyperbolic orbit solving
+- [ ] GetPositionAtTime() and GetVelocityAtTime() methods with vis-viva equation implementation
+- [ ] Adaptive sampling system: dense near Pe/Ap, sparse elsewhere for trajectory visualization
+- [ ] Comprehensive unit tests for both elliptical (e<1) and hyperbolic (e>=1) branches
+- [ ] Energy conservation validation over extended propagation periods
+- [ ] Integration with existing OrbitalState system and performance within budget
+- [ ] Kepler solver performance: <0.05ms per solve operation target
 
 ## Performance Targets
 
-- Orbital state calculation: <0.1ms per vessel per frame
-- Coordinate transformation: <0.05ms per conversion operation  
-- Gravity calculation: <0.2ms per vessel per frame
-- Memory allocation: <1KB additional per vessel for orbital state
-- Orbital accuracy: <1% drift over 10 complete orbits at 100km altitude
+- Kepler equation solving: <0.05ms per solve operation
+- Position calculation: <0.1ms per GetPositionAtTime() call
+- Velocity calculation: <0.1ms per GetVelocityAtTime() call  
+- Trajectory sampling: <1ms for typical orbital path generation
+- Memory allocation: <500 bytes per solver operation
+- Energy conservation: <1e-12 relative error over 100 orbital periods
 
 ## Requirements Fulfilled
 
-- **Requirement 3.1**: Double precision orbital mechanics implementation
-- **Requirement 3.2**: Keplerian orbital elements with epoch tracking
-- **Requirement 3.3**: Celestial body gravitational parameters and physics
-- **Requirement 3.4**: Coordinate transformations between reference frames
-- **Requirement 3.5**: Orbital propagation and time-based position calculation
-- **Requirement 3.6**: Integration with physics system for gravity forces
-- **Requirement 3.7**: Performance optimization for real-time orbital mechanics
+- **Requirement 3.1**: Enhanced orbital mechanics with centralized high-precision solver
+- **Requirement 3.2**: Advanced Keplerian element handling with both elliptical and hyperbolic support  
+- **Requirement 3.3**: Improved celestial body integration with trajectory generation capabilities
+- **Requirement 3.4**: Optimized coordinate transformations using centralized solver
+- **Requirement 3.5**: Enhanced orbital propagation with Newton-Raphson precision
+- **Requirement 3.6**: Maintained physics system integration with improved accuracy
+- **Requirement 3.7**: Performance optimization with specialized solver algorithms
 
 ## Technical Notes
 
 From tasks.md and CLAUDE.md:
-- All orbital calculations use double precision (Double3 struct) for accuracy
-- Homeworld scale: Kerbin at 600km radius with μ=3.5316e12 m³/s²
-- Standard gravity: 9.81 m/s² at surface level
-- Coordinate conversions only at physics/orbital boundary to maintain precision
-- Integration with existing 60Hz physics timestep for gravity force application
+- Centralize all Kepler solving in Orbital/Kepler.cs for consistency and performance
+- Newton-Raphson method with 1e-10 tolerance ensures high precision orbital calculations
+- Maximum 16 iterations prevents infinite loops while maintaining accuracy
+- Adaptive sampling optimizes trajectory rendering performance
+- Energy conservation validation ensures orbital mechanics accuracy
+- Integration with existing Double3 and OrbitalState systems maintained
 
-### Orbital Mechanics Architecture Overview
+### Kepler Solver Architecture Overview
 ```csharp
-// Core orbital state structure
-public struct OrbitalState
+// Centralized Kepler equation solver
+public static class Kepler
 {
-    public double SemiMajorAxis;      // a (meters)
-    public double Eccentricity;       // e (dimensionless)
-    public double Inclination;        // i (radians)
-    public double LongitudeOfAscendingNode; // Ω (radians)  
-    public double ArgumentOfPeriapsis; // ω (radians)
-    public double MeanAnomaly;        // M (radians)
-    public double Epoch;              // time reference (seconds)
-}
-
-// Celestial body definition
-public class CelestialBody
-{
-    public double Radius { get; set; }           // 600,000m for Kerbin
-    public double GravitationalParameter { get; set; } // 3.5316e12 m³/s²
-    public Double3 Position { get; set; }        // World position
+    // Elliptical orbit solver (e < 1)
+    public static double SolveElliptic(double meanAnomaly, double eccentricity, double tolerance = 1e-10, int maxIterations = 16);
+    
+    // Hyperbolic orbit solver (e >= 1)  
+    public static double SolveHyperbolic(double meanAnomaly, double eccentricity, double tolerance = 1e-10, int maxIterations = 16);
+    
+    // Position calculation at specified time
+    public static Double3 GetPositionAtTime(OrbitalState state, double time);
+    
+    // Velocity calculation using vis-viva equation
+    public static Double3 GetVelocityAtTime(OrbitalState state, double time);
+    
+    // Adaptive trajectory sampling for visualization
+    public static Double3[] SampleTrajectory(OrbitalState state, int sampleCount, bool adaptiveDensity = true);
 }
 ```
 
 ## Validation Commands
 
 After implementation:
-- "Test 100km circular orbit stability over 10 complete orbits"
-- "Validate orbital element to Cartesian coordinate transformations"
-- "Measure orbital mechanics system performance impact"
-- "Test various orbital eccentricities and inclinations"
-- "Verify gravity calculation accuracy and physics integration"
+- "Test elliptical Kepler solver accuracy with various eccentricities"
+- "Validate hyperbolic orbit solver for escape trajectories"
+- "Measure Kepler solver performance and convergence"
+- "Test energy conservation over extended propagation periods"
+- "Verify integration with existing orbital mechanics system"
 
 ## Post-Completion Actions
 
@@ -128,17 +131,17 @@ After successful validation, Claude Code should:
 
 1. **Update completed-tasks.md** with:
    ```markdown
-   ### Task 7: Implement double-precision orbital mechanics system
+   ### Task 8: Build centralized Kepler orbit solver and propagation system
    **Date**: [today's date]
    **Status**: ✅ Complete
    **Files Created/Modified**: [list files]
-   **Performance Results**: [orbital mechanics measurements]
-   **Notes**: [orbital accuracy test results and performance]
+   **Performance Results**: [Kepler solver measurements and accuracy]
+   **Notes**: [solver convergence results and energy conservation validation]
    ```
 
-2. **Update current-task.md** with Task 8 from tasks.md:
-   - Copy "Task 8: Build centralized Kepler orbit solver and propagation system" from tasks.md
-   - Add relevant technical details about Kepler solver implementation
+2. **Update current-task.md** with Task 9 from tasks.md:
+   - Copy "Task 9: Implement floating origin system for precision preservation" from tasks.md
+   - Add relevant technical details about floating origin implementation
    - Include success criteria and performance targets
 
-3. **Report to user**: "Task 7 complete. Next task is: Build centralized Kepler orbit solver and propagation system"
+3. **Report to user**: "Task 8 complete. Next task is: Implement floating origin system for precision preservation"

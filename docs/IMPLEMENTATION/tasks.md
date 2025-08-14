@@ -43,7 +43,7 @@
   - Test 10-part vessel structural integrity under 50kN thrust loading
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7_
 
-- [ ] 5. Implement anti-wobble system with dynamic joint stiffening
+- [x] 5. Implement anti-wobble system with dynamic joint stiffening
   - Create AntiWobbleSystem class with Q_ENABLE=12kPa, Q_DISABLE=8kPa thresholds and TAU=0.3s time constant
   - Implement wobble detection based on dynamic pressure and chain length with hysteresis band
   - Build progressive stiffening system with smooth transitions using exponential smoothing, max 5x multiplier
@@ -51,7 +51,7 @@
   - Test 30-part rocket stack shows no wobble at maximum thrust
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7_
 
-- [ ] 6. Create physics joint separation mechanics (low-level)
+- [x] 6. Create physics joint separation mechanics (low-level)
   - Implement atomic joint removal between vessel parts at physics system level
   - Apply exactly 500 N·s separation impulse at decoupler position in single frame
   - Handle instant mass redistribution with vessel mass, center of mass, and moment of inertia recalculation

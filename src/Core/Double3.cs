@@ -169,6 +169,62 @@ namespace Lithobrake.Core
             
             return (Cross(velocity, h) / gravitationalParameter) - (position / r);
         }
+        
+        /// <summary>
+        /// Calculate node vector (intersection of orbital plane with reference plane)
+        /// </summary>
+        public static Double3 NodeVector(Double3 angularMomentum)
+        {
+            // Node vector is perpendicular to both angular momentum and reference Z axis
+            return Cross(Up, angularMomentum);
+        }
+        
+        /// <summary>
+        /// Calculate semi-major axis from position, velocity, and gravitational parameter
+        /// </summary>
+        public static double SemiMajorAxis(Double3 position, Double3 velocity, double gravitationalParameter)
+        {
+            double r = position.Length;
+            double v = velocity.Length;
+            double energy = (v * v) / 2 - gravitationalParameter / r;
+            
+            if (Math.Abs(energy) < UNIVERSE_CONSTANTS.PRECISION_THRESHOLD)
+                return double.PositiveInfinity; // Parabolic orbit
+            
+            return -gravitationalParameter / (2 * energy);
+        }
+        
+        /// <summary>
+        /// Calculate vis-viva velocity magnitude for given radius and semi-major axis
+        /// </summary>
+        public static double VisVivaVelocity(double radius, double semiMajorAxis, double gravitationalParameter)
+        {
+            return Math.Sqrt(gravitationalParameter * (2.0 / radius - 1.0 / semiMajorAxis));
+        }
+        
+        /// <summary>
+        /// Rotate vector around specified axis by angle (radians)
+        /// </summary>
+        public static Double3 RotateAroundAxis(Double3 vector, Double3 axis, double angleRadians)
+        {
+            // Rodrigues' rotation formula
+            Double3 k = axis.Normalized;
+            double cosTheta = Math.Cos(angleRadians);
+            double sinTheta = Math.Sin(angleRadians);
+            
+            return vector * cosTheta + Cross(k, vector) * sinTheta + k * Dot(k, vector) * (1 - cosTheta);
+        }
+        
+        /// <summary>
+        /// Calculate the angle between two vectors in radians
+        /// </summary>
+        public static double AngleBetween(Double3 a, Double3 b)
+        {
+            double dot = Dot(a.Normalized, b.Normalized);
+            // Clamp to handle numerical precision issues
+            dot = Math.Max(-1.0, Math.Min(1.0, dot));
+            return Math.Acos(dot);
+        }
 
         // Equality and comparison
         public bool Equals(Double3 other) => X == other.X && Y == other.Y && Z == other.Z;

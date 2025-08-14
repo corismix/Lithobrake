@@ -51,6 +51,17 @@ namespace Lithobrake.Core
         private const float StandardSeparationImpulse = 500f; // N·s from CLAUDE.md
         private const double MaxSeparationTime = 0.2; // Maximum allowed separation time in ms
         
+        // Orbital mechanics integration
+        private OrbitalState? _orbitalState;
+        private CelestialBody _primaryBody;
+        private bool _isOnRails = false; // True for time warp, false for physics simulation
+        private double _lastOrbitalUpdate = 0.0;
+        private bool _orbitalStateValid = false;
+        
+        // Orbital calculation performance tracking
+        private double _orbitalCalculationTime = 0.0;
+        private const double OrbitalCalculationBudget = 0.5; // ms per frame from task requirements
+        
         public override void _Ready()
         {
             GD.Print($"PhysicsVessel: Node ready, waiting for initialization");
@@ -68,7 +79,13 @@ namespace Lithobrake.Core
             // Initialize anti-wobble system
             _antiWobbleSystem = new AntiWobbleSystem();
             
-            GD.Print($"PhysicsVessel {_vesselId}: Initialized with anti-wobble system");
+            // Initialize orbital mechanics with Kerbin as primary body
+            _primaryBody = CelestialBody.CreateKerbin();
+            _orbitalStateValid = false;
+            _isOnRails = false;
+            _lastOrbitalUpdate = Time.GetUnixTimeFromSystem();
+            
+            GD.Print($"PhysicsVessel {_vesselId}: Initialized with anti-wobble and orbital mechanics systems");
         }
         
         /// <summary>
@@ -738,6 +755,178 @@ namespace Lithobrake.Core
             _partLookup.Clear();
             
             GD.Print($"PhysicsVessel {_vesselId}: Cleaned up");
+        }
+        
+        /// <summary>
+        /// Update orbital state from current physics state (off-rails mode)
+        /// </summary>
+        public void UpdateOrbitalStateFromPhysics(double currentTime)
+        {
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            
+            if (_totalMass <= 0 || !_isActive)
+            {
+                _orbitalStateValid = false;
+                return;
+            }
+            
+            // Get current position and velocity in world coordinates
+            Double3 worldPosition = _position - _primaryBody.Position;
+            Double3 worldVelocity = _velocity;
+            
+            // Create orbital state from current Cartesian state
+            _orbitalState = OrbitalState.FromCartesian(worldPosition, worldVelocity, currentTime, 
+                                                     _primaryBody.GravitationalParameter);
+            _orbitalStateValid = _orbitalState.Value.IsValid();
+            _lastOrbitalUpdate = currentTime;
+            
+            stopwatch.Stop();
+            _orbitalCalculationTime = stopwatch.Elapsed.TotalMilliseconds;
+            
+            if (_orbitalCalculationTime > OrbitalCalculationBudget)
+            {
+                GD.PrintErr($"PhysicsVessel {_vesselId}: Orbital state update exceeded budget: {_orbitalCalculationTime:F3}ms");
+            }
+        }
+        
+        /// <summary>
+        /// Apply gravitational forces to all vessel parts during physics update
+        /// </summary>
+        public void ApplyGravitationalForces()
+        {
+            if (!_isActive || _isOnRails || _totalMass <= 0)
+                return;
+            
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            
+            // Calculate gravitational force for the vessel center of mass
+            Double3 gravityAcceleration = _primaryBody.CalculateGravitationalAcceleration(_position);
+            
+            // Apply gravity to all active parts
+            Vector3 gravityForce = (gravityAcceleration * _totalMass).ToVector3();
+            
+            foreach (var part in _parts.Where(p => p.IsActive && p.RigidBody != null))
+            {
+                // Apply proportional gravity force to each part
+                Vector3 partGravityForce = gravityForce * ((float)part.Mass / (float)_totalMass);
+                part.RigidBody.ApplyForce(partGravityForce);
+            }
+            
+            stopwatch.Stop();
+            double gravityCalcTime = stopwatch.Elapsed.TotalMilliseconds;
+            
+            if (gravityCalcTime > 0.2) // 0.2ms budget for gravity calculations
+            {
+                GD.PrintErr($"PhysicsVessel {_vesselId}: Gravity calculation exceeded budget: {gravityCalcTime:F3}ms");
+            }
+        }
+        
+        /// <summary>
+        /// Set vessel to on-rails mode for time warp (orbital propagation)
+        /// </summary>
+        public void SetOnRails(bool onRails)
+        {
+            if (_isOnRails == onRails)
+                return;
+            
+            _isOnRails = onRails;
+            
+            if (onRails)
+            {
+                // Update orbital state before going on rails
+                UpdateOrbitalStateFromPhysics(Time.GetUnixTimeFromSystem());
+                
+                // Disable physics for all parts
+                foreach (var part in _parts.Where(p => p.IsActive && p.RigidBody != null))
+                {
+                    part.RigidBody.Freeze = true;
+                }
+                
+                GD.Print($"PhysicsVessel {_vesselId}: Set to on-rails mode");
+            }
+            else
+            {
+                // Re-enable physics for all parts
+                foreach (var part in _parts.Where(p => p.IsActive && p.RigidBody != null))
+                {
+                    part.RigidBody.Freeze = false;
+                }
+                
+                // Update physics state from orbital state if available
+                if (_orbitalStateValid && _orbitalState.HasValue)
+                {
+                    UpdatePhysicsFromOrbitalState(Time.GetUnixTimeFromSystem());
+                }
+                
+                GD.Print($"PhysicsVessel {_vesselId}: Set to off-rails mode");
+            }
+        }
+        
+        /// <summary>
+        /// Update physics position/velocity from orbital state (on-rails to off-rails transition)
+        /// </summary>
+        private void UpdatePhysicsFromOrbitalState(double currentTime)
+        {
+            if (!_orbitalStateValid || !_orbitalState.HasValue)
+                return;
+            
+            // Propagate orbital state to current time
+            var currentOrbitalState = _orbitalState.Value.PropagateToTime(currentTime);
+            
+            // Convert to Cartesian coordinates
+            var (position, velocity) = currentOrbitalState.ToCartesian(currentTime);
+            
+            // Update vessel state
+            _position = position + _primaryBody.Position;
+            _velocity = velocity;
+            
+            // Update primary part position if available
+            if (_parts.Count > 0 && _parts[0].RigidBody != null)
+            {
+                var primaryPart = _parts[0].RigidBody;
+                primaryPart.GlobalPosition = _position.ToVector3();
+                primaryPart.LinearVelocity = _velocity.ToVector3();
+            }
+            
+            _lastOrbitalUpdate = currentTime;
+        }
+        
+        /// <summary>
+        /// Create orbital state for circular orbit at specified altitude
+        /// </summary>
+        public void SetCircularOrbit(double altitude, double inclination = 0)
+        {
+            _orbitalState = _primaryBody.CreateCircularOrbit(altitude, inclination, Time.GetUnixTimeFromSystem());
+            _orbitalStateValid = true;
+            
+            // Update physics position/velocity
+            UpdatePhysicsFromOrbitalState(Time.GetUnixTimeFromSystem());
+            
+            GD.Print($"PhysicsVessel {_vesselId}: Set to circular orbit at {altitude/1000:F1}km altitude");
+        }
+        
+        /// <summary>
+        /// Get current orbital parameters for display/monitoring
+        /// </summary>
+        public (OrbitalState? orbital, bool isValid, double calculationTime) GetOrbitalState()
+        {
+            return (_orbitalState, _orbitalStateValid, _orbitalCalculationTime);
+        }
+        
+        /// <summary>
+        /// Get orbital metrics for performance monitoring
+        /// </summary>
+        public (double altitude, double velocity, double period, bool inAtmosphere) GetOrbitalMetrics()
+        {
+            if (!_orbitalStateValid || !_orbitalState.HasValue)
+                return (0, 0, 0, false);
+            
+            double altitude = _primaryBody.GetAltitude(_position);
+            double velocity = _velocity.Length;
+            double period = _orbitalState.Value.OrbitalPeriod;
+            bool inAtmosphere = _primaryBody.IsInAtmosphere(_position);
+            
+            return (altitude, velocity, period, inAtmosphere);
         }
     }
     
