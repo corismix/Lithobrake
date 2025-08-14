@@ -11,10 +11,31 @@ config_version=5
 [application]
 
 config/name="Lithobrake"
-run/main_scene="res://test_scenes/integration_test.tscn"
+run/main_scene="res://scenes/integration_test.tscn"
 config/features=PackedStringArray("4.4", "C#", "Forward Plus")
 config/icon="res://icon.svg"
 
 [dotnet]
 
 project/assembly_name="Lithobrake"
+
+[physics]
+
+common/physics_ticks_per_second=60
+common/physics_jitter_fix=0.0
+common/enable_pause_aware_picking=false
+
+[rendering]
+
+renderer/rendering_method="forward_plus"
+renderer/rendering_method.mobile="forward_plus"
+anti_aliasing/quality/msaa_2d=0
+anti_aliasing/quality/msaa_3d=2
+anti_aliasing/quality/screen_space_aa=0
+anti_aliasing/quality/use_taa=false
+textures/canvas_textures/default_texture_filter=1
+driver/threads/thread_model=2
+
+[debug]
+
+settings/fps/force_fps=60

@@ -295,7 +295,11 @@ namespace Lithobrake.Core
             for (int i = 0; i < iterations; i++)
             {
                 // Simulate signal emission cost without actual emission
-                var dict = new Godot.Collections.Dictionary(testDict);
+                var dict = new Godot.Collections.Dictionary();
+                foreach (var kvp in testDict)
+                {
+                    dict[kvp.Key] = kvp.Value;
+                }
                 dict["iteration"] = i;
             }
             

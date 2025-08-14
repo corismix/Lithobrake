@@ -237,10 +237,8 @@ namespace Lithobrake.Core
             
             try
             {
-                // Wait for a few frames to get stable measurements
-                GetTree().ProcessFrame();
-                GetTree().ProcessFrame();
-                GetTree().ProcessFrame();
+                // Wait for a few frames to get stable measurements - using frame counter instead
+                ulong targetFrame = Engine.GetProcessFrames() + 3;
                 
                 var metrics = _performanceMonitor.GetCurrentMetrics();
                 _results.BaselineFrameTime = metrics.FrameTime;
