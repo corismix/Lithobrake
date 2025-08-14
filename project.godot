@@ -24,6 +24,10 @@ project/assembly_name="Lithobrake"
 common/physics_ticks_per_second=60
 common/physics_jitter_fix=0.0
 common/enable_pause_aware_picking=false
+3d/physics_engine="Jolt Physics"
+jolt_3d/collision_margin=0.001
+jolt_3d/solver_iterations=10
+jolt_3d/use_enhanced_precision=true
 
 [rendering]
 

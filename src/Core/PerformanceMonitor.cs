@@ -97,7 +97,7 @@ namespace Lithobrake.Core
         /// <summary>
         /// Access singleton instance safely
         /// </summary>
-        public static bool IsInstanceValid => _instance != null && GodotObject.IsInstanceValid(_instance);
+        public static new bool IsInstanceValid => _instance != null && GodotObject.IsInstanceValid(_instance);
         
         public override void _Process(double delta)
         {

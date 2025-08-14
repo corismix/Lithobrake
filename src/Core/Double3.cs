@@ -172,7 +172,7 @@ namespace Lithobrake.Core
 
         // Equality and comparison
         public bool Equals(Double3 other) => X == other.X && Y == other.Y && Z == other.Z;
-        public override bool Equals(object obj) => obj is Double3 other && Equals(other);
+        public override bool Equals(object? obj) => obj is Double3 other && Equals(other);
         public override int GetHashCode() => HashCode.Combine(X, Y, Z);
         public static bool operator ==(Double3 a, Double3 b) => a.Equals(b);
         public static bool operator !=(Double3 a, Double3 b) => !a.Equals(b);

@@ -1,0 +1,279 @@
+[gd_scene load_steps=6 format=3 uid="uid://c2y6g4s5t8x7w"]
+
+[sub_resource type="GDScript" id="GDScript_1"]
+script/source = "extends Node3D
+
+# Physics test controller for validating Jolt physics integration
+# Tests 60Hz physics tick, rigid body performance, and vessel systems
+
+var physics_manager: Node3D
+var performance_monitor: Node
+var test_vessel: Node3D
+var test_results: Dictionary = {}
+var test_running: bool = false
+
+func _ready():
+	print(\"Physics Test: Starting Jolt physics validation\")
+	
+	_setup_test_environment()
+	
+	# Start tests after initialization
+	await get_tree().create_timer(1.0).timeout
+	_run_physics_tests()
+
+func _setup_test_environment():
+	# Create PhysicsManager
+	physics_manager = find_child(\"PhysicsManager\")
+	if physics_manager == null:
+		print(\"Physics Test: PhysicsManager not found in scene\")
+	
+	# Find performance monitor  
+	performance_monitor = find_child(\"PerformanceMonitor\")
+	if performance_monitor == null:
+		print(\"Physics Test: Performance monitor not found\")
+	
+	print(\"Physics Test: Environment setup complete\")
+
+func _run_physics_tests():
+	print(\"\\n=== STARTING PHYSICS TESTS ===\")
+	test_running = true
+	
+	# Test 1: Physics Manager Singleton
+	await _test_physics_manager_singleton()
+	
+	# Test 2: 60Hz Physics Tick Validation
+	await _test_physics_tick_rate()
+	
+	# Test 3: Single Rigid Body Performance
+	await _test_single_rigid_body()
+	
+	# Test 4: Physics Vessel Creation
+	await _test_physics_vessel_creation()
+	
+	# Test 5: Physics Performance Budget
+	await _test_physics_performance_budget()
+	
+	_report_test_results()
+
+func _test_physics_manager_singleton():
+	print(\"\\n--- Test 1: PhysicsManager Singleton ---\")
+	
+	var success = physics_manager != null
+	var issues = []
+	
+	if success:
+		# Test singleton access
+		if physics_manager.has_method(\"get_physics_metrics\"):
+			var metrics = physics_manager.get_physics_metrics()
+			if metrics.fixed_delta_time != (1.0 / 60.0):
+				success = false
+				issues.append(\"Incorrect fixed delta time\")
+		else:
+			success = false
+			issues.append(\"Missing get_physics_metrics method\")
+	else:
+		issues.append(\"PhysicsManager not found\")
+	
+	test_results[\"physics_manager\"] = {
+		\"status\": \"PASSED\" if success else \"FAILED\",
+		\"issues\": issues
+	}
+	
+	print(\"PhysicsManager: %s\" % test_results[\"physics_manager\"].status)
+
+func _test_physics_tick_rate():
+	print(\"\\n--- Test 2: Physics Tick Rate ---\")
+	
+	if physics_manager == null:
+		test_results[\"tick_rate\"] = {\"status\": \"FAILED\", \"reason\": \"PhysicsManager not found\"}
+		return
+	
+	# Monitor physics ticks for 3 seconds
+	var initial_metrics = physics_manager.get_physics_metrics()
+	var initial_ticks = initial_metrics.physics_tick_count
+	
+	print(\"Monitoring physics ticks for 3 seconds...\")
+	await get_tree().create_timer(3.0).timeout
+	
+	var final_metrics = physics_manager.get_physics_metrics()
+	var final_ticks = final_metrics.physics_tick_count
+	var tick_diff = final_ticks - initial_ticks
+	var expected_ticks = 180  # 3 seconds * 60 Hz
+	
+	var success = abs(tick_diff - expected_ticks) <= 5  # Allow 5 tick tolerance
+	
+	test_results[\"tick_rate\"] = {
+		\"status\": \"PASSED\" if success else \"FAILED\",
+		\"expected_ticks\": expected_ticks,
+		\"actual_ticks\": tick_diff,
+		\"tick_rate_hz\": tick_diff / 3.0,
+		\"target_met\": success
+	}
+	
+	print(\"Physics Tick Rate: %s (%.1f Hz)\" % [test_results[\"tick_rate\"].status, tick_diff / 3.0])
+
+func _test_single_rigid_body():
+	print(\"\\n--- Test 3: Single Rigid Body Performance ---\")
+	
+	if physics_manager == null:
+		test_results[\"rigid_body\"] = {\"status\": \"FAILED\", \"reason\": \"PhysicsManager not found\"}
+		return
+	
+	# Create test rigid body
+	var test_body = physics_manager.create_test_body()
+	if test_body == null:
+		test_results[\"rigid_body\"] = {\"status\": \"FAILED\", \"reason\": \"Failed to create test body\"}
+		return
+	
+	# Monitor physics performance for 3 seconds
+	print(\"Testing single rigid body performance for 3 seconds...\")
+	var initial_metrics = physics_manager.get_physics_metrics()
+	await get_tree().create_timer(3.0).timeout
+	var final_metrics = physics_manager.get_physics_metrics()
+	
+	# Clean up test body
+	physics_manager.destroy_test_body()
+	
+	var success = final_metrics.average_physics_time <= 1.0  # Target: <1ms for single body
+	
+	test_results[\"rigid_body\"] = {
+		\"status\": \"PASSED\" if success else \"FAILED\",
+		\"avg_physics_time_ms\": final_metrics.average_physics_time,
+		\"target_ms\": 1.0,
+		\"target_met\": success
+	}
+	
+	print(\"Single Rigid Body: %s (%.3fms avg)\" % [test_results[\"rigid_body\"].status, final_metrics.average_physics_time])
+
+func _test_physics_vessel_creation():
+	print(\"\\n--- Test 4: PhysicsVessel Creation ---\")
+	
+	if physics_manager == null:
+		test_results[\"vessel_creation\"] = {\"status\": \"FAILED\", \"reason\": \"PhysicsManager not found\"}
+		return
+	
+	# Create test vessel
+	test_vessel = preload(\"res://src/Core/PhysicsVessel.cs\").new()
+	add_child(test_vessel)
+	
+	# Register vessel with physics manager
+	var vessel_id = physics_manager.register_vessel(test_vessel)
+	
+	var success = vessel_id > 0
+	var issues = []
+	
+	if success:
+		# Test vessel properties
+		if not test_vessel.has_method(\"get_part_count\"):
+			success = false
+			issues.append(\"Missing get_part_count method\")
+		
+		if not test_vessel.has_method(\"get_mass_properties\"):
+			success = false  
+			issues.append(\"Missing get_mass_properties method\")
+	
+	if success:
+		# Clean up vessel
+		physics_manager.unregister_vessel(vessel_id)
+		test_vessel.queue_free()
+	
+	test_results[\"vessel_creation\"] = {
+		\"status\": \"PASSED\" if success else \"FAILED\",
+		\"vessel_id\": vessel_id,
+		\"issues\": issues
+	}
+	
+	print(\"PhysicsVessel Creation: %s\" % test_results[\"vessel_creation\"].status)
+
+func _test_physics_performance_budget():
+	print(\"\\n--- Test 5: Physics Performance Budget ---\")
+	
+	if physics_manager == null:
+		test_results[\"performance_budget\"] = {\"status\": \"FAILED\", \"reason\": \"PhysicsManager not found\"}
+		return
+	
+	# Test performance validation
+	var validation_result = physics_manager.validate_performance()
+	var metrics = physics_manager.get_physics_metrics()
+	
+	var success = validation_result and metrics.is_performing_within_budget
+	
+	test_results[\"performance_budget\"] = {
+		\"status\": \"PASSED\" if success else \"FAILED\",
+		\"validation_passed\": validation_result,
+		\"within_budget\": metrics.is_performing_within_budget,
+		\"avg_physics_time_ms\": metrics.average_physics_time,
+		\"physics_budget_ms\": metrics.physics_budget
+	}
+	
+	print(\"Performance Budget: %s (%.2fms/%.0fms)\" % [test_results[\"performance_budget\"].status, metrics.average_physics_time, metrics.physics_budget])
+
+func _report_test_results():
+	print(\"\\n=== PHYSICS TEST RESULTS ===\")
+	
+	var passed_tests = 0
+	var total_tests = test_results.size()
+	
+	for test_name in test_results.keys():
+		var result = test_results[test_name]
+		var status_emoji = \"✅\" if result.status == \"PASSED\" else \"❌\"
+		print(\"%s %s: %s\" % [status_emoji, test_name.to_upper(), result.status])
+		
+		if result.status == \"PASSED\":
+			passed_tests += 1
+	
+	print(\"\\nSUMMARY: %d/%d physics tests passed\" % [passed_tests, total_tests])
+	
+	if passed_tests == total_tests:
+		print(\"🎉 ALL PHYSICS TESTS PASSED - Jolt physics system ready!\")
+	else:
+		print(\"⚠️  Some tests failed - Review physics implementation\")
+	
+	test_running = false
+	
+	# Update performance monitor status
+	if performance_monitor and performance_monitor.has_method(\"set_api_validation_status\"):
+		var status = \"✅ Physics Tests Complete (%d/%d)\" % [passed_tests, total_tests]
+		performance_monitor.set_api_validation_status(status)
+"
+
+[sub_resource type="Environment" id="Environment_1"]
+background_mode = 1
+background_color = Color(0.1, 0.1, 0.2, 1)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_1"]
+size = Vector3(10, 0.2, 10)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_1"]
+albedo_color = Color(0.4, 0.4, 0.6, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_1"]
+size = Vector3(10, 0.2, 10)
+
+[node name="PhysicsTest" type="Node3D"]
+script = SubResource("GDScript_1")
+
+[node name="PhysicsManager" type="Node3D" parent="." groups=["physics_manager"]]
+script = ExtResource("res://src/Core/PhysicsManager.cs")
+
+[node name="PerformanceMonitor" type="CanvasLayer" parent="." groups=["performance_monitor"]]
+script = ExtResource("res://src/Core/PerformanceMonitor.cs")
+
+[node name="Ground" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -1, 0)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Ground"]
+shape = SubResource("BoxShape3D_1")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Ground"]
+mesh = SubResource("BoxMesh_1")
+surface_material_override/0 = SubResource("StandardMaterial3D_1")
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.707107, 0.707107, 0, -0.707107, 0.707107, 0, 5, 8)
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.707107, -0.5, 0.5, 0, 0.707107, 0.707107, -0.707107, -0.5, 0.5, 0, 3, 0)
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_1")

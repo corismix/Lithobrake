@@ -209,3 +209,6 @@ After successful validation, always:
 - Time warp: <1% orbital drift over 10 orbits
 - Staging: Clean separation without physics glitches
 - Terminal velocity: Correct atmospheric drag behavior
+
+## Extra Notes
+- Put all future documentation in @docs/
