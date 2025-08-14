@@ -212,3 +212,4 @@ After successful validation, always:
 
 ## Extra Notes
 - Put all future documentation in @docs/
+- Remember to update @docs/IMPLEMENTATION/completed-tasks.md and @docs/IMPLEMENTATION/current-task.md each time you complete a task, ensuring you're ready for the next one.
