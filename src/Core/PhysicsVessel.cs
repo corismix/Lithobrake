@@ -52,6 +52,13 @@ namespace Lithobrake.Core
         private const float StandardSeparationImpulse = 500f; // N·s from CLAUDE.md
         private const double MaxSeparationTime = 0.2; // Maximum allowed separation time in ms
         
+        // Public properties for atmospheric system integration
+        public IEnumerable<Part> Parts => _parts
+            .Where(vp => vp.PartReference != null && vp.IsActive)
+            .Select(vp => vp.PartReference!);
+            
+        public Part? RootPart => _parts.FirstOrDefault(vp => vp.PartReference != null)?.PartReference;
+        
         // Orbital mechanics integration
         private OrbitalState? _orbitalState;
         private CelestialBody _primaryBody;
@@ -498,6 +505,9 @@ namespace Lithobrake.Core
                 UpdateMassProperties();
                 UpdatePositionAndVelocity();
                 
+                // Process atmospheric forces (drag, heating, dynamic pressure)
+                ProcessAtmosphericForces(delta);
+                
                 // Process thrust and fuel systems
                 ProcessThrustAndFuel(delta);
                 
@@ -807,6 +817,58 @@ namespace Lithobrake.Core
             var scaleHeight = 7500.0; // m
             
             return seaLevelPressure * Math.Exp(-altitude / scaleHeight);
+        }
+        
+        /// <summary>
+        /// Process atmospheric forces including drag, heating effects, and dynamic pressure
+        /// Integrates with atmospheric physics system for realistic flight dynamics
+        /// </summary>
+        /// <param name="delta">Physics timestep</param>
+        private void ProcessAtmosphericForces(double delta)
+        {
+            var startTime = Time.GetTicksMsec();
+            
+            try
+            {
+                // Early exit if vessel has no parts
+                if (_parts.Count == 0)
+                    return;
+                
+                // Get atmospheric properties at vessel position
+                var atmosphericProperties = Atmosphere.GetVesselAtmosphericProperties(this);
+                
+                // Apply aerodynamic drag forces to individual parts
+                foreach (var vesselPart in _parts.Where(vp => vp.IsActive && vp.RigidBody != null && vp.PartReference != null))
+                {
+                    var part = vesselPart.PartReference!;
+                    var velocity = vesselPart.RigidBody.LinearVelocity;
+                    
+                    // Calculate and apply drag force
+                    var dragForce = AerodynamicDrag.CalculateDragForce(part, velocity, atmosphericProperties);
+                    
+                    if (dragForce.LengthSquared() > 1e-6)
+                    {
+                        vesselPart.RigidBody.ApplyCentralForce(dragForce);
+                    }
+                }
+                
+                // Update dynamic pressure tracking and auto-struts integration
+                DynamicPressure.UpdateVesselQ(this);
+                
+                // Update all visual effects including heating
+                EffectsManager.UpdateVesselEffects(this);
+                
+                // Performance monitoring
+                var duration = Time.GetTicksMsec() - startTime;
+                if (duration > 0.3) // Target: <0.3ms atmospheric processing per vessel
+                {
+                    GD.PrintErr($"PhysicsVessel {_vesselId}: Atmospheric processing exceeded budget - {duration:F2}ms (target: 0.3ms)");
+                }
+            }
+            catch (Exception ex)
+            {
+                GD.PrintErr($"PhysicsVessel {_vesselId}: Atmospheric processing failed: {ex.Message}");
+            }
         }
         
         /// <summary>
@@ -1205,6 +1267,7 @@ namespace Lithobrake.Core
     {
         public int Id;
         public RigidBody3D RigidBody = null!;
+        public Part? PartReference = null!; // Reference to the actual Part for atmospheric calculations
         public double Mass;
         public Double3 LocalPosition;
         public bool IsActive;

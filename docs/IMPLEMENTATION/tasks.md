@@ -100,7 +100,7 @@
   - Implement exhaust effects using CPUParticles3D managed by C# EffectsManager with object pooling for performance
   - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7_
 
-- [ ] 12. Build atmospheric model and aerodynamic drag system
+- [x] 12. Build atmospheric model and aerodynamic drag system
   - Create Atmosphere class with exponential density model: ρ = 1.225 * exp(-h/7500) with altitude clamps
   - Implement drag calculations: Force = 0.5 * ρ * v² * Cd * A applied opposite to velocity vector
   - Add drag coefficients per part type: streamlined=0.3, blunt=1.0, with fairings=0.2

@@ -32,6 +32,7 @@ namespace Lithobrake.Core
         // Performance targets from current-task.md
         private const double EffectsUpdateBudget = 1.0; // ms per frame using object pooling
         private const double ThrustVisualizationBudget = 0.5; // ms per frame for all engines
+        private const double HeatingEffectsIntegrationBudget = 0.1; // ms per frame for heating coordination
         
         // Visual settings
         private const float MaxExhaustScale = 2.0f;
@@ -45,7 +46,7 @@ namespace Lithobrake.Core
             {
                 _instance = this;
                 InitializeObjectPools();
-                GD.Print("EffectsManager: Initialized as singleton with object pooling");
+                GD.Print("EffectsManager: Initialized as singleton with object pooling and heating effects integration");
             }
             else
             {
@@ -127,6 +128,71 @@ namespace Lithobrake.Core
             }
             
             UpdateThrustArrow(visualization, engine, thrust, efficiency);
+        }
+        
+        /// <summary>
+        /// Update all visual effects for a vessel including exhaust, thrust, and heating
+        /// Coordinates with HeatingEffects and DynamicPressure systems for comprehensive visualization
+        /// </summary>
+        /// <param name="vessel">Vessel to update effects for</param>
+        public static void UpdateVesselEffects(PhysicsVessel vessel)
+        {
+            if (vessel?.Parts == null || Instance == null)
+                return;
+            
+            var startTime = Time.GetTicksMsec();
+            
+            // Get atmospheric properties for heating and exhaust scaling
+            var atmosphericProperties = Atmosphere.GetVesselAtmosphericProperties(vessel);
+            
+            // Update engine-specific effects (exhaust and thrust visualization)
+            foreach (var part in vessel.Parts)
+            {
+                if (part is Engine engine && engine.IsActive)
+                {
+                    // Update exhaust effects with atmospheric scaling
+                    Instance.UpdateEngineExhaust(engine, engine.CurrentThrottle, atmosphericProperties.Pressure);
+                    
+                    // Update thrust visualization
+                    var thrust = engine.GetThrust(engine.CurrentThrottle, atmosphericProperties.Pressure);
+                    var efficiency = CalculateEngineEfficiency(engine, atmosphericProperties);
+                    Instance.UpdateThrustVisualization(engine, thrust, efficiency);
+                }
+            }
+            
+            // Coordinate with heating effects system
+            var vesselVelocity = vessel.RootPart?.RigidBody?.LinearVelocity ?? Vector3.Zero;
+            var dynamicPressure = DynamicPressure.CalculateQ(vesselVelocity, atmosphericProperties.Density);
+            var heatingIntensity = dynamicPressure * vesselVelocity.Length();
+            HeatingEffects.UpdateVesselHeating(vessel, heatingIntensity);
+            
+            // Performance monitoring
+            var duration = Time.GetTicksMsec() - startTime;
+            if (duration > HeatingEffectsIntegrationBudget)
+            {
+                GD.PrintErr($"EffectsManager: Vessel effects update exceeded budget - {duration:F2}ms (target: {HeatingEffectsIntegrationBudget:F2}ms)");
+            }
+        }
+        
+        /// <summary>
+        /// Calculate engine efficiency based on atmospheric conditions
+        /// </summary>
+        /// <param name="engine">Engine to calculate efficiency for</param>
+        /// <param name="atmosphericProperties">Atmospheric conditions</param>
+        /// <returns>Engine efficiency (0-1)</returns>
+        private static double CalculateEngineEfficiency(Engine engine, AtmosphericProperties atmosphericProperties)
+        {
+            // Simplified efficiency model - engines are more efficient in vacuum
+            var seaLevelPressure = 101325.0; // Pa
+            var pressureRatio = Math.Clamp(atmosphericProperties.Pressure / seaLevelPressure, 0.0, 1.0);
+            
+            // Vacuum engines: efficiency decreases with atmospheric pressure
+            // Atmospheric engines: efficiency optimized for sea level
+            // For now, assume all engines are vacuum-optimized (like rocket engines)
+            var vacuumEfficiency = 1.0;
+            var atmosphericEfficiency = 0.7; // Reduced efficiency at sea level
+            
+            return atmosphericEfficiency + (vacuumEfficiency - atmosphericEfficiency) * (1.0 - pressureRatio);
         }
         
         /// <summary>

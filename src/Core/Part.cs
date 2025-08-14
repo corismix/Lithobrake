@@ -19,6 +19,10 @@ namespace Lithobrake.Core
         public string Description { get; protected set; } = string.Empty;
         public PartType Type { get; protected set; }
         
+        // Aerodynamic properties for atmospheric physics
+        public double BaseDragCoefficient { get; protected set; } = 1.0; // Default blunt body Cd
+        public double CrossSectionalArea { get; protected set; } = 1.0; // Default 1 m² cross-sectional area
+        
         // Attachment points
         public AttachmentNode? AttachTop { get; protected set; }
         public AttachmentNode? AttachBottom { get; protected set; }
@@ -73,6 +77,9 @@ namespace Lithobrake.Core
                 
                 // Initialize attachment nodes
                 InitializeAttachmentNodes();
+                
+                // Initialize aerodynamic properties
+                InitializeAerodynamicProperties();
                 
                 // Mark as initialized
                 IsInitialized = true;
@@ -219,6 +226,52 @@ namespace Lithobrake.Core
                     IsOccupied = false
                 };
             }
+        }
+        
+        /// <summary>
+        /// Initialize aerodynamic properties based on part type and dimensions.
+        /// Can be overridden by derived classes for custom aerodynamic behavior.
+        /// </summary>
+        protected virtual void InitializeAerodynamicProperties()
+        {
+            var dimensions = GetPartDimensions();
+            
+            // Set drag coefficient based on part type using AerodynamicDrag constants
+            BaseDragCoefficient = Type switch
+            {
+                PartType.Command => AerodynamicDrag.DragCoefficients.Blunt, // Command pods are blunt
+                PartType.FuelTank => AerodynamicDrag.DragCoefficients.Blunt, // Cylindrical tanks
+                PartType.Engine => AerodynamicDrag.DragCoefficients.Engine, // Complex engine shapes
+                PartType.Structural => AerodynamicDrag.DragCoefficients.Blunt, // Structural parts
+                PartType.Aerodynamic => AerodynamicDrag.DragCoefficients.Streamlined, // Aerodynamic parts
+                PartType.Utility => AerodynamicDrag.DragCoefficients.Solar, // Solar panels and electrical
+                PartType.Science => AerodynamicDrag.DragCoefficients.Blunt, // Science equipment
+                PartType.LandingGear => AerodynamicDrag.DragCoefficients.Blunt, // Landing gear
+                PartType.Coupling => AerodynamicDrag.DragCoefficients.Blunt, // Docking ports
+                PartType.Cargo => AerodynamicDrag.DragCoefficients.Fairings, // Cargo bays are streamlined
+                _ => AerodynamicDrag.DragCoefficients.Blunt // Default to blunt body
+            };
+            
+            // Calculate cross-sectional area based on part dimensions
+            // Use the larger of width and height as the frontal area
+            var width = Math.Max(dimensions.X, dimensions.Z);
+            var height = dimensions.Y;
+            CrossSectionalArea = Math.PI * Math.Pow(width / 2.0, 2); // Assume circular cross-section
+            
+            // Clamp to reasonable bounds
+            CrossSectionalArea = Math.Clamp(CrossSectionalArea, 0.01, 100.0); // 0.01 to 100 m²
+        }
+        
+        /// <summary>
+        /// Set custom aerodynamic properties for specialized parts.
+        /// Used by derived classes to override default aerodynamic behavior.
+        /// </summary>
+        /// <param name="dragCoefficient">Drag coefficient (dimensionless)</param>
+        /// <param name="crossSectionalArea">Cross-sectional area in m²</param>
+        protected void SetAerodynamicProperties(double dragCoefficient, double crossSectionalArea)
+        {
+            BaseDragCoefficient = Math.Clamp(dragCoefficient, 0.01, 10.0); // Reasonable Cd range
+            CrossSectionalArea = Math.Clamp(crossSectionalArea, 0.001, 100.0); // Reasonable area range
         }
         
         /// <summary>
