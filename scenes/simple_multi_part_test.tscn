@@ -1,0 +1,11 @@
+[gd_scene load_steps=2 format=3 uid="uid://cq4y9t6v8x3zw"]
+
+[sub_resource type="Environment" id="Environment_1"]
+background_mode = 1
+background_color = Color(0.1, 0.1, 0.2, 1)
+
+[node name="SimpleMultiPartTest" type="Node3D"]
+script = ExtResource("res://src/Core/MultiPartTest.cs")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_1")

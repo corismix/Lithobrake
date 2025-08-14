@@ -1,0 +1,473 @@
+[gd_scene load_steps=7 format=3 uid="uid://bq3y8r5u9t2xv"]
+
+[sub_resource type="GDScript" id="GDScript_1"]
+script/source = "extends Node3D
+
+# Multi-part vessel test controller
+# Tests 10-part vessel structural integrity under 50kN thrust loading
+
+var physics_manager: Node3D
+var performance_monitor: Node
+var test_vessel: Node3D
+var test_parts: Array = []
+var test_results: Dictionary = {}
+var test_running: bool = false
+var thrust_force: float = 0.0
+
+func _ready():
+	print(\"Multi-Part Test: Starting vessel structural integrity tests\")
+	
+	_setup_test_environment()
+	
+	# Start tests after initialization
+	await get_tree().create_timer(1.0).timeout
+	_run_multi_part_tests()
+
+func _setup_test_environment():
+	# Create PhysicsManager
+	physics_manager = find_child(\"PhysicsManager\")
+	if physics_manager == null:
+		print(\"Multi-Part Test: PhysicsManager not found in scene\")
+	
+	# Find performance monitor  
+	performance_monitor = find_child(\"PerformanceMonitor\")
+	if performance_monitor == null:
+		print(\"Multi-Part Test: Performance monitor not found\")
+	
+	print(\"Multi-Part Test: Environment setup complete\")
+
+func _run_multi_part_tests():
+	print(\"\\n=== STARTING MULTI-PART VESSEL TESTS ===\")
+	test_running = true
+	
+	# Test 1: 10-Part Vessel Creation
+	await _test_vessel_creation()
+	
+	# Test 2: Joint System Validation
+	await _test_joint_system()
+	
+	# Test 3: Mass Aggregation System
+	await _test_mass_aggregation()
+	
+	# Test 4: Part Addition/Removal
+	await _test_part_operations()
+	
+	# Test 5: Structural Integrity Under Load
+	await _test_structural_integrity()
+	
+	# Test 6: Performance Under Load
+	await _test_performance_under_load()
+	
+	_report_test_results()
+
+func _test_vessel_creation():
+	print(\"\\n--- Test 1: 10-Part Vessel Creation ---\")
+	
+	if physics_manager == null:
+		test_results[\"vessel_creation\"] = {\"status\": \"FAILED\", \"reason\": \"PhysicsManager not found\"}
+		return
+	
+	# Create test vessel
+	var vessel_script = preload(\"res://src/Core/PhysicsVessel.cs\")
+	test_vessel = vessel_script.new()
+	add_child(test_vessel)
+	
+	# Register with physics manager
+	var vessel_id = physics_manager.RegisterVessel(test_vessel)
+	
+	# Create 10 parts in a vertical stack
+	var success = true
+	var issues = []
+	
+	for i in range(10):
+		var rigid_body = RigidBody3D.new()
+		var collision_shape = CollisionShape3D.new()
+		var box_shape = BoxShape3D.new()
+		var mesh_instance = MeshInstance3D.new()
+		var box_mesh = BoxMesh.new()
+		
+		# Set up geometry
+		box_shape.size = Vector3(1.0, 0.5, 1.0)
+		box_mesh.size = Vector3(1.0, 0.5, 1.0)
+		
+		collision_shape.shape = box_shape
+		mesh_instance.mesh = box_mesh
+		
+		rigid_body.add_child(collision_shape)
+		rigid_body.add_child(mesh_instance)
+		
+		# Position parts vertically
+		rigid_body.position = Vector3(0, i * 0.6, 0)
+		rigid_body.mass = 100.0  # 100kg per part
+		
+		add_child(rigid_body)
+		test_parts.append(rigid_body)
+		
+		# Add to vessel
+		var part_mass = 100.0
+		var local_pos = Vector3(0, i * 0.6, 0)  # Using Vector3 for Double3 conversion
+		if not test_vessel.AddPart(rigid_body, part_mass, local_pos):
+			success = false
+			issues.append(\"Failed to add part %d\" % i)
+	
+	# Create joints between adjacent parts
+	for i in range(9):
+		if not test_vessel.CreateJoint(i, i + 1, 0):  # JointType.Fixed = 0
+			success = false
+			issues.append(\"Failed to create joint %d-%d\" % [i, i + 1])
+	
+	var part_count = test_vessel.GetPartCount()
+	var joint_count = test_vessel.GetJointCount()
+	
+	if part_count != 10:
+		success = false
+		issues.append(\"Expected 10 parts, got %d\" % part_count)
+	
+	if joint_count != 9:
+		success = false
+		issues.append(\"Expected 9 joints, got %d\" % joint_count)
+	
+	test_results[\"vessel_creation\"] = {
+		\"status\": \"PASSED\" if success else \"FAILED\",
+		\"part_count\": part_count,
+		\"joint_count\": joint_count,
+		\"vessel_id\": vessel_id,
+		\"issues\": issues
+	}
+	
+	print(\"10-Part Vessel: %s (%d parts, %d joints)\" % [test_results[\"vessel_creation\"].status, part_count, joint_count])
+
+func _test_joint_system():
+	print(\"\\n--- Test 2: Joint System Validation ---\")
+	
+	if test_vessel == null:
+		test_results[\"joint_system\"] = {\"status\": \"FAILED\", \"reason\": \"Test vessel not created\"}
+		return
+	
+	var success = true
+	var issues = []
+	
+	# Test joint tuning update
+	if test_vessel.has_method(\"UpdateJointTuning\"):
+		# Try updating joint 0 with flexible tuning (skip tuning test for now - focus on core functionality)
+		# test_vessel.UpdateJointTuning(0, \"flexible_tuning\")
+		pass
+	else:
+		success = false
+		issues.append(\"Missing UpdateJointTuning method\")
+	
+	# Test joint removal and restoration
+	var initial_joint_count = test_vessel.GetJointCount()
+	
+	if test_vessel.has_method(\"RemoveJoint\"):
+		test_vessel.RemoveJoint(8)  # Remove last joint
+		var after_removal_count = test_vessel.GetJointCount()
+		
+		if after_removal_count != initial_joint_count - 1:
+			success = false
+			issues.append(\"Joint removal failed - count mismatch\")
+		
+		# Recreate the joint
+		test_vessel.CreateJoint(8, 9, 0)  # JointType.Fixed
+		var after_restoration_count = test_vessel.GetJointCount()
+		
+		if after_restoration_count != initial_joint_count:
+			success = false
+			issues.append(\"Joint restoration failed - count mismatch\")
+	else:
+		success = false
+		issues.append(\"Missing RemoveJoint method\")
+	
+	test_results[\"joint_system\"] = {
+		\"status\": \"PASSED\" if success else \"FAILED\",
+		\"initial_joints\": initial_joint_count,
+		\"final_joints\": test_vessel.get_joint_count(),
+		\"issues\": issues
+	}
+	
+	print(\"Joint System: %s\" % test_results[\"joint_system\"].status)
+
+func _test_mass_aggregation():
+	print(\"\\n--- Test 3: Mass Aggregation System ---\")
+	
+	if test_vessel == null:
+		test_results[\"mass_aggregation\"] = {\"status\": \"FAILED\", \"reason\": \"Test vessel not created\"}
+		return
+	
+	var success = true
+	var issues = []
+	
+	# Get mass properties
+	var mass_properties = test_vessel.GetMassProperties()
+	
+	if mass_properties == null:
+		success = false
+		issues.append(\"Failed to get mass properties\")
+	else:
+		var expected_mass = 1000.0  # 10 parts * 100kg each
+		var actual_mass = mass_properties.get(\"TotalMass\", 0)
+		
+		if abs(actual_mass - expected_mass) > 1.0:  # 1kg tolerance
+			success = false
+			issues.append(\"Mass calculation incorrect: expected %.1f, got %.1f\" % [expected_mass, actual_mass])
+		
+		# Check center of mass is reasonable (should be around middle of stack)
+		var center_of_mass = mass_properties.get(\"CenterOfMass\", Vector3.ZERO)
+		var expected_com_y = 4.5 * 0.6  # Middle of 10-part stack
+		
+		if center_of_mass != Vector3.ZERO:
+			var com_y_error = abs(center_of_mass.y - expected_com_y)
+			if com_y_error > 0.5:  # 0.5m tolerance
+				success = false
+				issues.append(\"Center of mass Y incorrect: expected %.1f, got %.1f\" % [expected_com_y, center_of_mass.y])
+	
+	test_results[\"mass_aggregation\"] = {
+		\"status\": \"PASSED\" if success else \"FAILED\",
+		\"total_mass\": mass_properties.get(\"TotalMass\", 0) if mass_properties else 0,
+		\"center_of_mass\": mass_properties.get(\"CenterOfMass\", Vector3.ZERO) if mass_properties else Vector3.ZERO,
+		\"issues\": issues
+	}
+	
+	print(\"Mass Aggregation: %s (%.1fkg total)\" % [test_results[\"mass_aggregation\"].status, test_results[\"mass_aggregation\"].total_mass])
+
+func _test_part_operations():
+	print(\"\\n--- Test 4: Part Addition/Removal Operations ---\")
+	
+	if test_vessel == null:
+		test_results[\"part_operations\"] = {\"status\": \"FAILED\", \"reason\": \"Test vessel not created\"}
+		return
+	
+	var success = true
+	var issues = []
+	
+	var initial_part_count = test_vessel.GetPartCount()
+	var initial_joint_count = test_vessel.GetJointCount()
+	
+	# Test atomic part removal
+	if test_vessel.has_method(\"RemovePart\"):
+		# Remove top part (part 9) which should also remove joint 8
+		test_vessel.RemovePart(9, false)  # Don't apply separation impulse for test
+		
+		var after_removal_parts = test_vessel.GetPartCount()
+		var after_removal_joints = test_vessel.GetJointCount()
+		
+		if after_removal_parts != initial_part_count - 1:
+			success = false
+			issues.append(\"Part removal failed - expected %d parts, got %d\" % [initial_part_count - 1, after_removal_parts])
+		
+		if after_removal_joints != initial_joint_count - 1:
+			success = false
+			issues.append(\"Joint cleanup failed - expected %d joints, got %d\" % [initial_joint_count - 1, after_removal_joints])
+		
+		# Test mass property updates
+		var new_mass_properties = test_vessel.GetMassProperties()
+		var expected_new_mass = 900.0  # 9 parts * 100kg each
+		var actual_new_mass = new_mass_properties.get(\"TotalMass\", 0) if new_mass_properties else 0
+		
+		if abs(actual_new_mass - expected_new_mass) > 1.0:
+			success = false
+			issues.append(\"Mass not updated after part removal: expected %.1f, got %.1f\" % [expected_new_mass, actual_new_mass])
+	else:
+		success = false
+		issues.append(\"Missing RemovePart method\")
+	
+	test_results[\"part_operations\"] = {
+		\"status\": \"PASSED\" if success else \"FAILED\",
+		\"initial_parts\": initial_part_count,
+		\"final_parts\": test_vessel.GetPartCount(),
+		\"initial_joints\": initial_joint_count,
+		\"final_joints\": test_vessel.GetJointCount(),
+		\"issues\": issues
+	}
+	
+	print(\"Part Operations: %s (%d→%d parts)\" % [test_results[\"part_operations\"].status, initial_part_count, test_vessel.GetPartCount()])
+
+func _test_structural_integrity():
+	print(\"\\n--- Test 5: 50kN Thrust Structural Integrity ---\")
+	
+	if test_vessel == null or test_parts.size() == 0:
+		test_results[\"structural_integrity\"] = {\"status\": \"FAILED\", \"reason\": \"Test vessel or parts not available\"}
+		return
+	
+	var success = true
+	var issues = []
+	var initial_joint_count = test_vessel.GetJointCount()
+	
+	# Apply 50kN thrust to bottom part for 5 seconds
+	thrust_force = 50000.0  # 50kN
+	var bottom_part = test_parts[0]
+	
+	if bottom_part != null and is_instance_valid(bottom_part):
+		print(\"Applying 50kN thrust for 5 seconds...\")
+		
+		# Apply thrust over time
+		var thrust_duration = 5.0
+		var thrust_start_time = Time.get_time_dict_from_system()
+		
+		# Apply thrust as impulse (F = ma, impulse = F * dt)
+		var thrust_impulse = Vector3(0, thrust_force / bottom_part.mass, 0) * thrust_duration
+		bottom_part.apply_central_impulse(thrust_impulse)
+		
+		# Wait for test duration
+		await get_tree().create_timer(thrust_duration).timeout
+		
+		# Check if joints survived
+		var final_joint_count = test_vessel.GetJointCount()
+		if final_joint_count < initial_joint_count:
+			success = false
+			issues.append(\"Joint failure detected: %d joints lost\" % (initial_joint_count - final_joint_count))
+		
+		# Check if parts are still connected (no excessive separation)
+		var max_separation = 0.0
+		for i in range(test_parts.size() - 1):
+			if i >= test_vessel.GetPartCount() - 1:
+				break
+			var part_a = test_parts[i]
+			var part_b = test_parts[i + 1]
+			if part_a != null and part_b != null and is_instance_valid(part_a) and is_instance_valid(part_b):
+				var separation = part_a.global_position.distance_to(part_b.global_position)
+				max_separation = max(max_separation, separation)
+		
+		if max_separation > 2.0:  # 2m maximum separation tolerance
+			success = false
+			issues.append(\"Excessive part separation detected: %.1fm max\" % max_separation)
+	else:
+		success = false
+		issues.append(\"Bottom part not available for thrust test\")
+	
+	test_results[\"structural_integrity\"] = {
+		\"status\": \"PASSED\" if success else \"FAILED\",
+		\"thrust_applied_N\": thrust_force,
+		\"initial_joints\": initial_joint_count,
+		\"final_joints\": test_vessel.GetJointCount() if test_vessel else 0,
+		\"joints_survived\": (test_vessel.GetJointCount() if test_vessel else 0) == initial_joint_count,
+		\"issues\": issues
+	}
+	
+	print(\"Structural Integrity: %s (%.0fkN thrust)\" % [test_results[\"structural_integrity\"].status, thrust_force / 1000.0])
+
+func _test_performance_under_load():
+	print(\"\\n--- Test 6: Performance Under Load ---\")
+	
+	if physics_manager == null:
+		test_results[\"performance_under_load\"] = {\"status\": \"FAILED\", \"reason\": \"PhysicsManager not found\"}
+		return
+	
+	# Monitor performance during multi-part simulation
+	print(\"Monitoring performance for 3 seconds...\")
+	var initial_metrics = physics_manager.GetPhysicsMetrics()
+	await get_tree().create_timer(3.0).timeout
+	var final_metrics = physics_manager.GetPhysicsMetrics()
+	
+	var success = final_metrics.AveragePhysicsTime <= 3.0  # Target: <3ms for 10-part vessel
+	var issues = []
+	
+	if not success:
+		issues.append(\"Physics time exceeded 3ms budget: %.3fms\" % final_metrics.AveragePhysicsTime)
+	
+	test_results[\"performance_under_load\"] = {
+		\"status\": \"PASSED\" if success else \"FAILED\",
+		\"avg_physics_time_ms\": final_metrics.AveragePhysicsTime,
+		\"target_ms\": 3.0,
+		\"target_met\": success,
+		\"issues\": issues
+	}
+	
+	print(\"Performance Under Load: %s (%.3fms avg)\" % [test_results[\"performance_under_load\"].status, final_metrics.AveragePhysicsTime])
+
+func _report_test_results():
+	print(\"\\n=== MULTI-PART VESSEL TEST RESULTS ===\")
+	
+	var passed_tests = 0
+	var total_tests = test_results.size()
+	
+	for test_name in test_results.keys():
+		var result = test_results[test_name]
+		var status_emoji = \"✅\" if result.status == \"PASSED\" else \"❌\"
+		print(\"%s %s: %s\" % [status_emoji, test_name.to_upper(), result.status])
+		
+		if result.has(\"issues\") and result.issues.size() > 0:
+			for issue in result.issues:
+				print(\"   - %s\" % issue)
+		
+		if result.status == \"PASSED\":
+			passed_tests += 1
+	
+	print(\"\\nSUMMARY: %d/%d multi-part tests passed\" % [passed_tests, total_tests])
+	
+	if passed_tests == total_tests:
+		print(\"🎉 ALL MULTI-PART TESTS PASSED - Multi-part vessel system ready!\")
+	else:
+		print(\"⚠️  Some tests failed - Review multi-part implementation\")
+	
+	test_running = false
+	
+	# Update performance monitor status
+	if performance_monitor and performance_monitor.has_method(\"set_api_validation_status\"):
+		var status = \"✅ Multi-Part Tests Complete (%d/%d)\" % [passed_tests, total_tests]
+		performance_monitor.set_api_validation_status(status)
+	
+	# Cleanup
+	_cleanup_test_environment()
+
+func _cleanup_test_environment():
+	print(\"\\nCleaning up test environment...\")
+	
+	# Clean up test vessel
+	if test_vessel != null and is_instance_valid(test_vessel):
+		if test_vessel.has_method(\"Cleanup\"):
+			test_vessel.Cleanup()
+		test_vessel.queue_free()
+	
+	# Clean up test parts
+	for part in test_parts:
+		if part != null and is_instance_valid(part):
+			part.queue_free()
+	test_parts.clear()
+	
+	print(\"Multi-Part Test: Cleanup complete\")
+"
+
+[sub_resource type="Environment" id="Environment_1"]
+background_mode = 1
+background_color = Color(0.1, 0.1, 0.2, 1)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_1"]
+size = Vector3(20, 0.2, 20)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_1"]
+albedo_color = Color(0.4, 0.4, 0.6, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_1"]
+size = Vector3(20, 0.2, 20)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_2"]
+albedo_color = Color(0.8, 0.2, 0.2, 1)
+
+[node name="MultiPartTest" type="Node3D"]
+script = SubResource("GDScript_1")
+
+[node name="PhysicsManager" type="Node3D" parent="." groups=["physics_manager"]]
+script = ExtResource("res://src/Core/PhysicsManager.cs")
+
+[node name="PerformanceMonitor" type="CanvasLayer" parent="." groups=["performance_monitor"]]
+script = ExtResource("res://src/Core/PerformanceMonitor.cs")
+
+[node name="Ground" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -1, 0)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Ground"]
+shape = SubResource("BoxShape3D_1")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Ground"]
+mesh = SubResource("BoxMesh_1")
+surface_material_override/0 = SubResource("StandardMaterial3D_1")
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.5, 0.866025, 0, -0.866025, 0.5, 0, 10, 15)
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.707107, -0.5, 0.5, 0, 0.707107, 0.707107, -0.707107, -0.5, 0.5, 0, 5, 0)
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_1")

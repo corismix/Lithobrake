@@ -95,6 +95,14 @@ namespace Lithobrake.Core
         /// </summary>
         public bool CreateJoint(int partA, int partB, JointType jointType)
         {
+            return CreateJoint(partA, partB, jointType, JointTuning.Rigid);
+        }
+        
+        /// <summary>
+        /// Create a joint between two parts with custom tuning
+        /// </summary>
+        public bool CreateJoint(int partA, int partB, JointType jointType, JointTuning tuning)
+        {
             if (!_partLookup.TryGetValue(partA, out var partARef) || 
                 !_partLookup.TryGetValue(partB, out var partBRef))
             {
@@ -115,15 +123,32 @@ namespace Lithobrake.Core
                         fixedJoint.SetFlagY((Generic6DofJoint3D.Flag)i, true);
                         fixedJoint.SetFlagZ((Generic6DofJoint3D.Flag)i, true);
                     }
+                    // Apply joint tuning parameters
+                    tuning.ApplyTo6DOFJoint(fixedJoint);
                     joint = fixedJoint;
                     break;
                     
                 case JointType.Hinge:
                     joint = new HingeJoint3D();
+                    // TODO: Apply tuning to HingeJoint3D when needed
                     break;
                     
                 case JointType.Ball:
                     joint = new ConeTwistJoint3D();
+                    // TODO: Apply tuning to ConeTwistJoint3D when needed
+                    break;
+                    
+                case JointType.Separable:
+                    var separableJoint = new Generic6DofJoint3D();
+                    // Lock all axes but with separable tuning
+                    for (int i = 0; i < 6; i++)
+                    {
+                        separableJoint.SetFlagX((Generic6DofJoint3D.Flag)i, true);
+                        separableJoint.SetFlagY((Generic6DofJoint3D.Flag)i, true);
+                        separableJoint.SetFlagZ((Generic6DofJoint3D.Flag)i, true);
+                    }
+                    tuning.ApplyTo6DOFJoint(separableJoint);
+                    joint = separableJoint;
                     break;
             }
             
@@ -146,12 +171,13 @@ namespace Lithobrake.Core
                 PartA = partA,
                 PartB = partB,
                 JointType = jointType,
+                Tuning = tuning,
                 IsActive = true
             };
             
             _joints.Add(vesselJoint);
             
-            GD.Print($"PhysicsVessel {_vesselId}: Created {jointType} joint between parts {partA} and {partB}");
+            GD.Print($"PhysicsVessel {_vesselId}: Created {jointType} joint between parts {partA} and {partB} with tuning");
             return true;
         }
         
@@ -170,8 +196,88 @@ namespace Lithobrake.Core
             }
             
             joint.IsActive = false;
+            _massPropertiesDirty = true; // Mark for mass recalculation
             GD.Print($"PhysicsVessel {_vesselId}: Removed joint {jointId}");
             return true;
+        }
+        
+        /// <summary>
+        /// Remove a part and all connected joints (atomic operation)
+        /// </summary>
+        public bool RemovePart(int partId, bool applySeparationImpulse = true)
+        {
+            if (!_partLookup.TryGetValue(partId, out var part))
+            {
+                GD.PrintErr($"PhysicsVessel {_vesselId}: Cannot remove part {partId} - not found");
+                return false;
+            }
+            
+            // Find all joints connected to this part
+            var connectedJoints = _joints
+                .Where(j => j.IsActive && (j.PartA == partId || j.PartB == partId))
+                .ToList();
+            
+            // Apply separation impulse if requested (for staging)
+            if (applySeparationImpulse && part.RigidBody != null && GodotObject.IsInstanceValid(part.RigidBody))
+            {
+                const float SeparationImpulse = 500f; // 500 N·s from CLAUDE.md
+                var separationForce = Vector3.Up * SeparationImpulse / part.RigidBody.Mass;
+                part.RigidBody.ApplyCentralImpulse(separationForce);
+                GD.Print($"PhysicsVessel {_vesselId}: Applied separation impulse to part {partId}");
+            }
+            
+            // Remove all connected joints atomically
+            foreach (var joint in connectedJoints)
+            {
+                RemoveJoint(joint.Id);
+            }
+            
+            // Mark part as inactive (don't destroy RigidBody, let PhysicsManager handle it)
+            part.IsActive = false;
+            _massPropertiesDirty = true;
+            
+            GD.Print($"PhysicsVessel {_vesselId}: Removed part {partId} and {connectedJoints.Count} connected joints");
+            return true;
+        }
+        
+        /// <summary>
+        /// Update joint tuning parameters (for anti-wobble system)
+        /// </summary>
+        public void UpdateJointTuning(int jointId, JointTuning newTuning)
+        {
+            if (jointId < 0 || jointId >= _joints.Count)
+                return;
+                
+            var joint = _joints[jointId];
+            if (!joint.IsActive || joint.Joint == null || !GodotObject.IsInstanceValid(joint.Joint))
+                return;
+                
+            joint.Tuning = newTuning;
+            
+            // Apply new tuning if it's a Generic6DOFJoint3D
+            if (joint.Joint is Generic6DofJoint3D dofJoint)
+            {
+                newTuning.ApplyTo6DOFJoint(dofJoint);
+                GD.Print($"PhysicsVessel {_vesselId}: Updated joint {jointId} tuning parameters");
+            }
+        }
+        
+        /// <summary>
+        /// Apply separation impulse to a specific part (for staging)
+        /// </summary>
+        public void ApplySeparationImpulse(int partId, Vector3? direction = null, float impulse = 500f)
+        {
+            if (!_partLookup.TryGetValue(partId, out var part) || 
+                part.RigidBody == null || !GodotObject.IsInstanceValid(part.RigidBody))
+            {
+                return;
+            }
+            
+            var separationDirection = direction ?? Vector3.Up;
+            var separationForce = separationDirection.Normalized() * impulse / part.RigidBody.Mass;
+            part.RigidBody.ApplyCentralImpulse(separationForce);
+            
+            GD.Print($"PhysicsVessel {_vesselId}: Applied {impulse}N·s separation impulse to part {partId}");
         }
         
         /// <summary>
@@ -384,7 +490,9 @@ namespace Lithobrake.Core
         public int PartA;
         public int PartB;
         public JointType JointType;
+        public JointTuning Tuning;
         public bool IsActive;
+        public double CurrentStress = 0.0; // Current force/torque applied to joint
     }
     
     /// <summary>
@@ -392,9 +500,10 @@ namespace Lithobrake.Core
     /// </summary>
     public enum JointType
     {
-        Fixed,
-        Hinge,
-        Ball
+        Fixed,      // Rigid connection
+        Hinge,      // Rotational joint
+        Ball,       // Ball joint (3DOF rotation)
+        Separable   // Fixed but designed for separation (staging)
     }
     
     /// <summary>

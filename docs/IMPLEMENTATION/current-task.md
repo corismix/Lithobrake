@@ -1,103 +1,113 @@
-# Current Task: Build multi-part vessel system with joint connections
+# Current Task: Implement anti-wobble system with dynamic joint stiffening
 
 ## Task Overview
 
-**Task 4 from implementation plan**: Build multi-part vessel system with joint connections
+**Task 5 from implementation plan**: Implement anti-wobble system with dynamic joint stiffening
 
-This task extends the PhysicsVessel class to handle multiple RigidBody3D parts connected by joints, implementing a complete multi-part vessel physics system with mass aggregation and structural integrity testing.
+This task builds on the multi-part vessel system to implement an intelligent anti-wobble system that dynamically adjusts joint stiffness based on atmospheric conditions and vessel configuration. The system prevents structural wobble in tall rocket stacks while maintaining realistic physics behavior.
 
 ## Implementation Steps
 
-### 1. Extend PhysicsVessel for Multi-Part Support
-- Extend PhysicsVessel.cs to handle multiple RigidBody3D parts connected by Joint3D
-- Implement joint creation and management system between vessel parts
-- Add support for joint hierarchies and complex vessel structures
-- Ensure proper part lifecycle management with joint dependencies
+### 1. Create AntiWobbleSystem Class
+- Create AntiWobbleSystem class with atmospheric pressure thresholds
+- Implement Q_ENABLE=12kPa and Q_DISABLE=8kPa thresholds with hysteresis
+- Add TAU=0.3s time constant for smooth exponential transitions
+- Integrate with existing PhysicsVessel and JointTuning systems
 
-### 2. Implement Joint System with Tuning Parameters
-- Implement joint system using Generic6DOFJoint3D for flexible connections
-- Create JointTuning struct for stiffness/damping parameters
-- Add support for different joint types (fixed, hinge, ball) with proper configuration
-- Implement joint parameter adjustment for performance and stability
+### 2. Implement Wobble Detection System
+- Create wobble detection based on dynamic pressure and chain length
+- Calculate Q (dynamic pressure) from atmospheric density and velocity
+- Implement hysteresis band to prevent oscillation between states
+- Add vessel configuration analysis for wobble-prone structures
 
-### 3. Create Mass Aggregation System
-- Create mass aggregation system to calculate total mass, center of mass, and moment of inertia tensor
-- Implement efficient mass property updates when parts are added/removed
-- Add proper handling of mass distribution changes during simulation
-- Ensure mass calculations are accurate for orbital mechanics integration
+### 3. Build Progressive Stiffening System
+- Implement smooth joint stiffness transitions using exponential smoothing
+- Apply maximum 5x stiffness multiplier for severe conditions
+- Use existing JointTuning.Scale() method for dynamic parameter adjustment
+- Ensure progressive stiffening maintains physics stability
 
-### 4. Add Part Addition/Removal Handling
-- Add part addition/removal handling with atomic mass property updates
-- Implement safe joint connection and disconnection procedures
-- Handle cascade effects when parts are removed (joint cleanup)
-- Ensure no physics glitches during dynamic vessel modification
+### 4. Add Virtual Struts for Long Chains
+- Detect long chains (>5 parts) prone to wobble instability
+- Create temporary virtual struts connecting parts to root vessel
+- Implement automatic removal when atmospheric conditions improve
+- Ensure virtual struts don't interfere with staging operations
 
-### 5. Structural Integrity Testing
-- Test 10-part vessel structural integrity under 50kN thrust loading
-- Validate joint stability under high loads and dynamic conditions  
-- Measure performance impact of multi-part vessels vs single parts
-- Test edge cases: long chains, complex branching structures
+### 5. Anti-Wobble System Testing
+- Test 30-part rocket stack shows no wobble at maximum thrust
+- Validate smooth transitions between stiffening states
+- Measure performance impact of anti-wobble calculations
+- Test edge cases: staging during wobble suppression, rapid acceleration changes
 
 ## Files to Create/Modify
 
-- **Core Physics Enhancement**:
-  - `src/Core/PhysicsVessel.cs` - Extend for multi-part vessel support with joints
-  - `src/Core/JointTuning.cs` - Joint parameter configuration struct (new file)
+- **Core Anti-Wobble System**:
+  - `src/Core/AntiWobbleSystem.cs` - Main anti-wobble logic with pressure thresholds and stiffening (new file)
+  - `src/Core/AtmosphericConditions.cs` - Atmospheric pressure and density calculations (new file)
+  
+- **Integration**:
+  - `src/Core/PhysicsVessel.cs` - Integrate anti-wobble system with vessel physics
+  - `src/Core/JointTuning.cs` - Add dynamic stiffening support if needed
   
 - **Test Scenes**:
-  - `scenes/multi_part_test.tscn` - Multi-part vessel testing scene
-  - Update existing `scenes/physics_test.tscn` for multi-part validation
-  
-- **Additional Classes**:
-  - May need additional helper classes for joint management
+  - `scenes/anti_wobble_test.tscn` - 30-part rocket wobble testing scene
+  - Update existing `scenes/multi_part_test.tscn` for anti-wobble validation
 
 ## Success Criteria
 
-- [ ] PhysicsVessel handles multiple RigidBody3D parts with Joint3D connections
-- [ ] Generic6DOFJoint3D system implemented with JointTuning parameters
-- [ ] Mass aggregation calculates total mass, center of mass, and moment of inertia
-- [ ] Part addition/removal works with atomic mass property updates
-- [ ] 10-part vessel maintains structural integrity under 50kN thrust
+- [ ] AntiWobbleSystem class with Q_ENABLE=12kPa, Q_DISABLE=8kPa thresholds
+- [ ] TAU=0.3s time constant for smooth exponential transitions
+- [ ] Wobble detection based on dynamic pressure and chain length
+- [ ] Progressive stiffening system with smooth transitions (max 5x multiplier)
+- [ ] Virtual struts for long chains (>5 parts) with automatic removal
+- [ ] 30-part rocket stack shows no wobble at maximum thrust
 - [ ] Performance remains within physics budget (≤5ms total)
-- [ ] No physics glitches during dynamic vessel modification
-- [ ] Integration with existing PhysicsManager and PerformanceMonitor
+- [ ] Integration with existing PhysicsManager and vessel systems
 
 ## Performance Targets
 
-- Multi-part vessel physics: <3ms per frame for 10-part vessel
-- Joint computation overhead: <0.5ms per joint per frame
-- Mass calculation updates: <0.1ms per vessel modification
-- Memory allocation: <2KB per vessel regardless of part count
-- Structural stability: No joint failures under rated loads
+- Anti-wobble calculations: <0.5ms per frame for 30-part vessel
+- Stiffness transitions: <0.2ms per vessel per frame
+- Virtual strut management: <0.1ms per vessel per frame
+- Memory allocation: <1KB additional per vessel
+- Wobble suppression effectiveness: 95%+ reduction in oscillation amplitude
 
 ## Requirements Fulfilled
 
-- **Requirement 2.1**: Physics engine integration (multi-part vessels)
-- **Requirement 2.2**: 60Hz fixed timestep with complex structures
-- **Requirement 2.3**: Performance monitoring for multi-part systems
+- **Requirement 2.1**: Physics engine integration (anti-wobble enhancement)
+- **Requirement 2.2**: 60Hz fixed timestep with dynamic stiffening
+- **Requirement 2.3**: Performance monitoring for anti-wobble system
 - **Requirement 2.4**: Advanced vessel physics management
-- **Requirement 2.5**: Complex mass properties calculation
-- **Requirement 2.6**: Multi-body collision detection
-- **Requirement 2.7**: Deterministic multi-part physics
+- **Requirement 2.5**: Complex joint parameter management
+- **Requirement 2.6**: Multi-body stability systems
+- **Requirement 2.7**: Deterministic anti-wobble behavior
 
 ## Technical Notes
 
 From tasks.md:
-- Use Generic6DOFJoint3D for flexible joint connections between parts
-- JointTuning struct should contain stiffness and damping parameters
-- Mass aggregation must be efficient for real-time updates
-- Atomic mass property updates prevent physics discontinuities
-- Test with realistic rocket structures (linear stacks, radial attachments)
-- Thrust loading test simulates main engine ignition scenarios
+- Q_ENABLE=12kPa threshold enables anti-wobble (high dynamic pressure)
+- Q_DISABLE=8kPa threshold disables anti-wobble (hysteresis prevents oscillation)
+- TAU=0.3s time constant for exponential smoothing of stiffness changes
+- Virtual struts only for long chains (>5 parts) to prevent excessive complexity
+- Progressive stiffening with maximum 5x multiplier maintains physics realism
+- Anti-wobble system should integrate seamlessly with existing joint tuning
+
+### Anti-Wobble Algorithm Overview
+```csharp
+// Simplified anti-wobble logic
+Q = 0.5 * atmospheric_density * velocity_squared
+wobble_factor = CalculateWobbleFactor(chain_length, Q);
+target_stiffness = base_stiffness * Mathf.Clamp(wobble_factor, 1.0f, 5.0f);
+current_stiffness = Mathf.Lerp(current_stiffness, target_stiffness, Time.fixedDeltaTime / TAU);
+```
 
 ## Validation Commands
 
 After implementation:
-- "Test the multi-part vessel system with a 10-part rocket"
-- "Apply 50kN thrust and verify structural integrity"
-- "Measure performance with complex vessel structures"
-- "Test part addition and removal during simulation"
-- "Validate mass property calculations are accurate"
+- "Test the anti-wobble system with a 30-part rocket at maximum thrust"
+- "Validate smooth stiffness transitions during atmospheric flight"
+- "Measure performance impact of anti-wobble calculations"
+- "Test virtual struts for long rocket chains"
+- "Verify hysteresis prevents wobble state oscillation"
 
 ## Post-Completion Actions
 
@@ -105,17 +115,17 @@ After successful validation, Claude Code should:
 
 1. **Update completed-tasks.md** with:
    ```markdown
-   ### Task 4: Build multi-part vessel system with joint connections
+   ### Task 5: Implement anti-wobble system with dynamic joint stiffening
    **Date**: [today's date]
    **Status**: ✅ Complete
    **Files Created/Modified**: [list files]
-   **Performance Results**: [multi-part physics measurements]
-   **Notes**: [structural integrity test results]
+   **Performance Results**: [anti-wobble system measurements]
+   **Notes**: [wobble suppression test results and effectiveness]
    ```
 
-2. **Update current-task.md** with Task 5 from tasks.md:
-   - Copy "Task 5: Implement anti-wobble system with dynamic joint stiffening" from tasks.md
-   - Add relevant technical details
+2. **Update current-task.md** with Task 6 from tasks.md:
+   - Copy "Task 6: Create physics joint separation mechanics (low-level)" from tasks.md
+   - Add relevant technical details about atomic joint removal
    - Include success criteria and performance targets
 
-3. **Report to user**: "Task 4 complete. Next task is: Implement anti-wobble system with dynamic joint stiffening"
+3. **Report to user**: "Task 5 complete. Next task is: Create physics joint separation mechanics (low-level)"
