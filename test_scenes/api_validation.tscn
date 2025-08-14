@@ -1,0 +1,12 @@
+[gd_scene load_steps=3 format=3 uid="uid://dxk7yh1bqcsxg"]
+
+[ext_resource type="Script" path="res://src/Core/PerformanceMonitor.cs" id="1_0m5vx"]
+[ext_resource type="Script" path="res://src/Core/ApiValidation.cs" id="2_n8h7f"]
+
+[node name="ApiValidationScene" type="Node"]
+
+[node name="PerformanceMonitor" type="CanvasLayer" parent="."]
+script = ExtResource("1_0m5vx")
+
+[node name="ApiValidation" type="Node" parent="."]
+script = ExtResource("2_n8h7f")
