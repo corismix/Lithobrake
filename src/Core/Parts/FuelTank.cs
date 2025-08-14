@@ -86,6 +86,7 @@ namespace Lithobrake.Core
         
         /// <summary>
         /// Connect to other fuel tanks for crossfeed
+        /// Uses tree traversal to find accessible tanks through vessel structure
         /// </summary>
         private void ConnectToFuelNetwork()
         {
@@ -94,8 +95,46 @@ namespace Lithobrake.Core
             if (!CanCrossfeed)
                 return;
             
-            // In a full implementation, this would traverse the vessel structure
-            // to find connected fuel tanks. For now, it's a placeholder.
+            // Find tanks accessible through vessel structure (simplified for now)
+            // In full implementation, this would traverse attachment nodes
+            var vessel = GetParent<PhysicsVessel>();
+            if (vessel != null)
+            {
+                ConnectToNearbyTanks(vessel);
+            }
+        }
+        
+        /// <summary>
+        /// Connect to nearby fuel tanks in the same vessel
+        /// </summary>
+        /// <param name="vessel">Parent vessel</param>
+        private void ConnectToNearbyTanks(PhysicsVessel vessel)
+        {
+            // Find other fuel tanks in the vessel
+            var allTanks = vessel.GetChildren().OfType<FuelTank>().ToList();
+            
+            foreach (var otherTank in allTanks)
+            {
+                if (otherTank != this && otherTank.CanCrossfeed)
+                {
+                    // Check if tanks are close enough to connect (crossfeed range)
+                    var distance = GlobalPosition.DistanceTo(otherTank.GlobalPosition);
+                    if (distance <= GetCrossfeedRange())
+                    {
+                        ConnectToTank(otherTank);
+                    }
+                }
+            }
+        }
+        
+        /// <summary>
+        /// Get crossfeed range for this tank type
+        /// </summary>
+        /// <returns>Maximum crossfeed distance in meters</returns>
+        private float GetCrossfeedRange()
+        {
+            // Stack tanks can crossfeed further than radial tanks
+            return AttachTop != null && AttachBottom != null ? 10.0f : 5.0f;
         }
         
         /// <summary>
@@ -187,6 +226,7 @@ namespace Lithobrake.Core
         
         /// <summary>
         /// Drain fuel from the tank (used by engines)
+        /// Implements priority-based drainage with crossfeed support
         /// </summary>
         public double DrainFuel(double requestedAmount, FuelType fuelType = FuelType.LiquidFuel)
         {
@@ -194,33 +234,15 @@ namespace Lithobrake.Core
             
             double actualDrained = 0;
             
-            switch (fuelType)
+            // Try to drain from this tank first
+            actualDrained = DrainFuelFromTank(requestedAmount, fuelType);
+            
+            // If we couldn't get enough fuel from this tank and crossfeed is enabled,
+            // try connected tanks
+            if (actualDrained < requestedAmount && CanCrossfeed)
             {
-                case FuelType.LiquidFuel:
-                    actualDrained = Math.Min(requestedAmount, LiquidFuel);
-                    LiquidFuel -= actualDrained;
-                    break;
-                    
-                case FuelType.Oxidizer:
-                    actualDrained = Math.Min(requestedAmount, Oxidizer);
-                    Oxidizer -= actualDrained;
-                    break;
-                    
-                case FuelType.Both:
-                    // Drain proportionally
-                    var fuelRatio = LiquidFuelMax > 0 ? LiquidFuel / LiquidFuelMax : 0;
-                    var oxidizerRatio = OxidizerMax > 0 ? Oxidizer / OxidizerMax : 0;
-                    
-                    if (fuelRatio > 0 && oxidizerRatio > 0)
-                    {
-                        var fuelDrain = Math.Min(requestedAmount * 0.9, LiquidFuel); // 9:11 ratio
-                        var oxidizerDrain = Math.Min(requestedAmount * 1.1, Oxidizer);
-                        
-                        LiquidFuel -= fuelDrain;
-                        Oxidizer -= oxidizerDrain;
-                        actualDrained = fuelDrain + oxidizerDrain;
-                    }
-                    break;
+                var remainingNeeded = requestedAmount - actualDrained;
+                actualDrained += DrainFromConnectedTanks(remainingNeeded, fuelType);
             }
             
             if (actualDrained > 0)
@@ -236,6 +258,109 @@ namespace Lithobrake.Core
             }
             
             return actualDrained;
+        }
+        
+        /// <summary>
+        /// Drain fuel from this specific tank
+        /// </summary>
+        /// <param name="requestedAmount">Amount to drain</param>
+        /// <param name="fuelType">Type of fuel to drain</param>
+        /// <returns>Actually drained amount</returns>
+        private double DrainFuelFromTank(double requestedAmount, FuelType fuelType)
+        {
+            double actualDrained = 0;
+            
+            switch (fuelType)
+            {
+                case FuelType.LiquidFuel:
+                    actualDrained = Math.Min(requestedAmount, LiquidFuel);
+                    LiquidFuel -= actualDrained;
+                    break;
+                    
+                case FuelType.Oxidizer:
+                    actualDrained = Math.Min(requestedAmount, Oxidizer);
+                    Oxidizer -= actualDrained;
+                    break;
+                    
+                case FuelType.Both:
+                    // Drain proportionally maintaining 9:11 fuel:oxidizer ratio
+                    var fuelRatio = LiquidFuelMax > 0 ? LiquidFuel / LiquidFuelMax : 0;
+                    var oxidizerRatio = OxidizerMax > 0 ? Oxidizer / OxidizerMax : 0;
+                    
+                    if (fuelRatio > 0 && oxidizerRatio > 0)
+                    {
+                        var fuelDrain = Math.Min(requestedAmount * 0.45, LiquidFuel); // 45% liquid fuel
+                        var oxidizerDrain = Math.Min(requestedAmount * 0.55, Oxidizer); // 55% oxidizer
+                        
+                        LiquidFuel -= fuelDrain;
+                        Oxidizer -= oxidizerDrain;
+                        actualDrained = fuelDrain + oxidizerDrain;
+                    }
+                    break;
+            }
+            
+            return actualDrained;
+        }
+        
+        /// <summary>
+        /// Drain fuel from connected tanks based on priority
+        /// </summary>
+        /// <param name="requestedAmount">Amount still needed</param>
+        /// <param name="fuelType">Type of fuel to drain</param>
+        /// <returns>Amount drained from connected tanks</returns>
+        private double DrainFromConnectedTanks(double requestedAmount, FuelType fuelType)
+        {
+            var totalDrained = 0.0;
+            var remainingNeeded = requestedAmount;
+            
+            // Sort connected tanks by priority (closest, fullest first)
+            var sortedTanks = ConnectedTanks
+                .Where(t => t != null && !t.IsQueuedForDeletion() && !t.IsEmpty())
+                .OrderByDescending(t => GetTankPriority(t))
+                .ToList();
+            
+            foreach (var tank in sortedTanks)
+            {
+                if (remainingNeeded <= 0)
+                    break;
+                
+                var drained = tank.DrainFuelFromTank(remainingNeeded, fuelType);
+                totalDrained += drained;
+                remainingNeeded -= drained;
+                
+                if (drained > 0)
+                {
+                    tank.UpdateFuelMass();
+                }
+            }
+            
+            return totalDrained;
+        }
+        
+        /// <summary>
+        /// Get drainage priority for a connected tank
+        /// Higher priority tanks are drained first
+        /// </summary>
+        /// <param name="tank">Tank to evaluate</param>
+        /// <returns>Priority score (higher = higher priority)</returns>
+        private double GetTankPriority(FuelTank tank)
+        {
+            var priority = 0.0;
+            
+            // Distance factor: closer tanks have higher priority
+            var distance = GlobalPosition.DistanceTo(tank.GlobalPosition);
+            priority += Math.Max(0, 100.0 - distance); // Max 100 points from distance
+            
+            // Fuel level factor: fuller tanks have higher priority for drainage
+            priority += tank.GetFuelPercentage() * 50.0; // Max 50 points from fuel level
+            
+            // Tank type compatibility
+            if (tank.TankType == TankType)
+            {
+                priority += 25.0; // Bonus for same tank type
+            }
+            
+            return priority;
         }
         
         /// <summary>

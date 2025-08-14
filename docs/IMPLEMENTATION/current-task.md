@@ -1,155 +1,157 @@
-# Current Task: Build thrust and fuel consumption system with realistic physics
+# Current Task: Build atmospheric model and aerodynamic drag system
 
 ## Task Overview
 
-**Task 11 from implementation plan**: Build thrust and fuel consumption system with realistic physics
+**Task 12 from implementation plan**: Build atmospheric model and aerodynamic drag system
 
-This task implements realistic thrust generation and fuel consumption mechanics with proper physics calculations, fuel flow systems, throttle control, and visual feedback. The system integrates with existing Engine and FuelTank parts to provide accurate rocket propulsion simulation.
+This task implements realistic atmospheric physics with exponential density models, aerodynamic drag calculations, dynamic pressure tracking, and heating visualization. The system integrates with existing physics systems to provide accurate atmospheric effects during flight.
 
 ## Implementation Steps
 
-### 1. Enhance Engine Thrust System
-- Update `src/Core/Parts/Engine.cs` with GetThrust() method using mass flow rate and Isp calculations
-- Implement thrust curves vs constant Isp approach for realistic engine performance
-- Add engine state management (ignited/shutdown/flameout) with proper startup/shutdown sequences
-- Implement gimbal control for thrust vectoring and attitude control
-- Calculate thrust efficiency based on atmospheric pressure and altitude
+### 1. Create Atmosphere Class
+- Create `src/Core/Atmosphere.cs` with exponential density model: ρ = 1.225 * exp(-h/7500) with altitude clamps
+- Implement atmospheric constants for Kerbin-scale atmosphere (70km height, 7.5km scale height)
+- Add temperature gradient modeling for realistic atmospheric physics
+- Provide efficient density lookup with caching for performance optimization
+- Handle altitude boundaries and edge cases (negative altitude, space transitions)
 
-### 2. Create Fuel Flow System
-- Implement fuel consumption calculation using formula: consumption = thrust / (Isp * g0)
-- Add fuel depletion tracking with real-time fuel level monitoring
-- Create fuel transfer system between connected tanks with crossfeed capability
-- Handle fuel starvation scenarios with automatic engine shutdown
-- Implement fuel priority system for optimal fuel management
+### 2. Implement Aerodynamic Drag Calculations
+- Calculate drag force using: Force = 0.5 * ρ * v² * Cd * A applied opposite to velocity vector
+- Add drag coefficient system per part type: streamlined=0.3, blunt=1.0, with fairings=0.2
+- Implement effective cross-sectional area calculation based on velocity direction
+- Apply drag forces to individual parts with proper force application points
+- Optimize drag calculations for multiple parts per vessel
 
-### 3. Build Fuel Tank Drainage System
-- Create tree traversal algorithm for fuel flow from engines to tanks (bottom to top)
-- Implement crossfeed blocking at decouplers and structural separations
-- Add fuel line management with automatic routing and manual override capabilities
-- Handle fuel tank emptying with center of mass shifts and mass property updates
-- Validate fuel accessibility and prevent isolated tank scenarios
+### 3. Build Dynamic Pressure System
+- Track dynamic pressure Q = 0.5 * ρ * v² for structural and visual effects
+- Trigger auto-struts integration with AntiWobbleSystem based on Q thresholds
+- Display dynamic pressure in flight UI for pilot awareness
+- Use Q for heating effects scaling and atmospheric flight feedback
+- Monitor Max Q events and provide warnings for structural limits
 
-### 4. Implement Throttle Control System
-- Add throttle input handling with Z/X keys for 5% incremental steps
-- Implement Shift+Z for full throttle (100%) and Ctrl+X for complete cutoff
-- Create smooth throttle transitions to prevent sudden thrust changes
-- Add throttle response curves for different engine types
-- Integrate throttle with fuel consumption and thrust calculations
+### 4. Add Heating Visualization System
+- Implement heating visualization with red glow effect scaled by Q * velocity
+- Use particle effects or shader-based glow without damage mechanics implementation
+- Scale heating effects based on atmospheric density and velocity
+- Add heating intensity calculation for different part materials and shapes
+- Ensure heating effects performance meets <0.5ms per part rendering budget
 
-### 5. Create Thrust Visualization System
-- Implement thrust vector visualization with arrows scaled by thrust magnitude
-- Color-code thrust vectors by engine efficiency (atmospheric vs vacuum performance)
-- Add real-time thrust display showing current thrust, maximum thrust, and efficiency
-- Create visual feedback for engine state changes and throttle adjustments
-- Ensure visualization performance meets <0.5ms per engine rendering budget
+### 5. Implement Terminal Velocity Physics
+- Calculate terminal velocity where thrust + drag = weight for accurate physics
+- Test rocket reaches correct terminal velocity in different atmospheric layers
+- Verify drag decreases correctly with altitude as atmosphere thins
+- Handle supersonic vs subsonic drag coefficient transitions
+- Validate realistic ascent profiles with atmospheric drag effects
 
-### 6. Build Exhaust Effects System
-- Create EffectsManager.cs for managing particle systems and visual effects
-- Implement exhaust particle effects using CPUParticles3D for engine plumes
-- Add object pooling system for performance optimization and memory management
-- Scale exhaust effects based on thrust level, atmospheric density, and engine efficiency
-- Implement exhaust light emission and heat distortion effects for atmospheric flight
+### 6. Physics System Integration
+- Integrate drag forces with existing PhysicsVessel system for realistic flight
+- Apply drag forces at part center of pressure with proper torque effects
+- Handle atmospheric flight stability and control authority changes
+- Optimize atmospheric calculations for <0.3ms per frame per vessel
+- Ensure atmospheric system maintains 60 FPS with multiple vessels
 
-### 7. Physics Integration and Performance
-- Integrate thrust forces with existing PhysicsVessel system for realistic physics
-- Apply thrust forces at engine mount points with proper force direction
-- Handle engine failure scenarios and asymmetric thrust situations
-- Optimize fuel consumption calculations for <0.2ms per frame per engine
-- Ensure thrust system maintains 60 FPS with multiple engines active
+### 7. Performance Optimization and Validation
+- Implement atmospheric calculation caching and efficient lookup tables
+- Optimize drag force application for vessels with many parts
+- Monitor performance impact on physics budget and script timing
+- Test atmospheric effects with 30+ part vessels maintaining 60 FPS
+- Validate realistic atmospheric flight behavior and terminal velocity
 
 ## Files to Create/Modify
 
-- **Engine System Updates**:
-  - Update `src/Core/Parts/Engine.cs` - Add GetThrust(), fuel consumption, and engine state management
-  - Update `src/Core/Parts/FuelTank.cs` - Add fuel transfer, drainage, and crossfeed systems
+- **Atmospheric Physics**:
+  - Create `src/Core/Atmosphere.cs` - Exponential density model and atmospheric constants (new file)
+  - Create `src/Core/AerodynamicDrag.cs` - Drag force calculations and part coefficients (new file)
+  - Create `src/Core/DynamicPressure.cs` - Q calculations and structural effects integration (new file)
   
-- **New Systems**:
-  - Create `src/Core/ThrustSystem.cs` - Centralized thrust calculations and force application (new file)
-  - Create `src/Core/FuelFlowSystem.cs` - Fuel routing, consumption, and tank management (new file)
-  - Create `src/Core/ThrottleController.cs` - Input handling and throttle management (new file)
-  - Create `src/Core/EffectsManager.cs` - Particle systems and visual effects management (new file)
+- **Visual Effects**:
+  - Create `src/Core/HeatingEffects.cs` - Heating visualization and particle effects management (new file)
+  - Update `src/Core/EffectsManager.cs` - Integrate heating effects with existing visual system
   
-- **Integration Updates**:
-  - Update `src/Core/PhysicsVessel.cs` - Integrate thrust forces with physics simulation
-  - Update `src/Core/TestRocketAssembly.cs` - Add thrust and fuel consumption testing
+- **Physics Integration**:
+  - Update `src/Core/PhysicsVessel.cs` - Integrate atmospheric forces with physics simulation
+  - Update `src/Core/Parts/Part.cs` - Add drag coefficient and cross-sectional area properties
   
-- **Test Infrastructure**:
-  - Create `src/Core/ThrustTests.cs` - Unit tests for thrust and fuel systems (new file)
-  - Update `scenes/parts_test.tscn` - Add thrust system validation and performance testing
-  - Create `scenes/thrust_test.tscn` - Specialized thrust system testing scene (new file)
+- **Testing Infrastructure**:
+  - Create `src/Core/AtmosphericTests.cs` - Unit tests for atmospheric physics and drag systems (new file)
+  - Create `scenes/atmospheric_test.tscn` - Atmospheric physics testing scene (new file)
+  - Update existing test scenes - Add atmospheric effects validation
 
 ## Success Criteria
 
-- [ ] GetThrust() method in Engine.cs with mass flow rate and Isp calculations (thrust = mass_flow * exhaust_velocity)
-- [ ] Fuel consumption system using formula: consumption = thrust / (Isp * g0) with accurate fuel depletion
-- [ ] Fuel tank drainage system with tree traversal from engines to tanks, crossfeed support
-- [ ] Throttle control with Z/X keys (5% steps), Shift+Z (full), Ctrl+X (cutoff), smooth transitions
-- [ ] Thrust visualization with vector arrows scaled by thrust, colored by efficiency
-- [ ] Exhaust effects using CPUParticles3D with EffectsManager and object pooling
-- [ ] Physics integration applying thrust forces at engine mount points with proper direction
-- [ ] Performance targets: <0.2ms fuel calculations, <0.5ms thrust visualization, 60 FPS maintained
+- [ ] Atmosphere class with exponential density model ρ = 1.225 * exp(-h/7500) and altitude boundaries
+- [ ] Drag force calculation using Force = 0.5 * ρ * v² * Cd * A applied opposite to velocity
+- [ ] Drag coefficients per part type: streamlined=0.3, blunt=1.0, fairings=0.2 with area calculations
+- [ ] Dynamic pressure Q = 0.5 * ρ * v² tracking with auto-struts integration and UI display
+- [ ] Heating visualization with red glow effects scaled by Q * velocity without damage mechanics
+- [ ] Terminal velocity physics where rocket reaches correct terminal velocity and drag decreases with altitude
+- [ ] Performance targets: <0.3ms atmospheric calculations, <0.5ms heating effects, 60 FPS maintained
 
 ## Performance Targets
 
-- Thrust calculation: <0.2ms per frame per engine
-- Fuel consumption update: <0.1ms per frame per fuel tank
-- Thrust visualization: <0.5ms per frame for all engines
-- Exhaust effects: <1ms per frame using object pooling
+- Atmospheric density calculation: <0.1ms per frame per vessel
+- Drag force calculation: <0.2ms per frame for all parts in vessel
+- Dynamic pressure tracking: <0.05ms per frame per vessel
+- Heating effects rendering: <0.5ms per frame for all parts
 - Physics integration: <0.3ms additional to existing physics budget
-- Memory allocation: <1KB per frame for thrust/fuel systems
+- Memory allocation: <0.5KB per frame for atmospheric systems
 
 ## Requirements Fulfilled
 
-- **Requirement 4.1**: Engine thrust generation with realistic physics calculations
-- **Requirement 4.2**: Fuel consumption system based on specific impulse and mass flow
-- **Requirement 4.3**: Fuel routing and crossfeed management between tanks
-- **Requirement 4.4**: User throttle control with keyboard input and smooth response
-- **Requirement 4.5**: Visual thrust feedback with magnitude and efficiency indication
-- **Requirement 4.6**: Exhaust particle effects with performance optimization
-- **Requirement 4.7**: Physics integration maintaining simulation accuracy and performance
+- **Requirement 4.1**: Atmospheric physics with realistic density models
+- **Requirement 4.2**: Aerodynamic drag forces affecting flight dynamics
+- **Requirement 4.3**: Dynamic pressure tracking for structural and visual effects
+- **Requirement 4.4**: Visual feedback through heating effects and atmospheric indicators
+- **Requirement 4.5**: Terminal velocity physics and altitude-based drag changes
+- **Requirement 4.6**: Performance optimization maintaining 60 FPS flight experience
+- **Requirement 4.7**: Integration with existing physics and effects systems
 
 ## Technical Notes
 
-From tasks.md and CLAUDE.md:
-- Engine performance based on realistic rocket equation: F = mass_flow * exhaust_velocity
-- Specific impulse (Isp) determines fuel efficiency: consumption = thrust / (Isp * g0)
-- Fuel flow follows vessel structure from engines up through tanks
-- Crossfeed capability allows fuel sharing between connected tanks
-- Throttle control provides smooth thrust adjustment for precise maneuvering
-- Visual feedback essential for understanding engine performance and efficiency
+From tasks.md and atmospheric physics principles:
+- Exponential atmosphere model: ρ = ρ₀ * exp(-h/H) where H = 7500m scale height
+- Drag equation: F_drag = ½ρv²CdA where Cd varies by part shape and flow regime
+- Dynamic pressure Q = ½ρv² drives structural loads and heating effects
+- Terminal velocity occurs when drag + buoyancy = weight (F_drag = mg)
+- Heating intensity scales with Q * velocity for realistic atmospheric entry effects
+- Integration with AntiWobbleSystem for Q-based auto-struts activation
 
-### Thrust System Architecture Overview
+### Atmospheric System Architecture Overview
 ```csharp
-// Thrust system integration
-public class ThrustSystem : Node
+// Atmospheric physics system
+public class Atmosphere : Node
 {
-    // Engine management and thrust calculations
-    public static double CalculateThrust(Engine engine, double throttle, double atmosphericPressure);
-    public static void ApplyThrustForces(PhysicsVessel vessel, List<Engine> engines);
-    
-    // Fuel consumption and flow management
-    public static double CalculateFuelConsumption(Engine engine, double thrust);
-    public static void UpdateFuelFlow(PhysicsVessel vessel);
+    // Atmospheric density and pressure calculations
+    public static double GetDensity(double altitude);
+    public static double GetPressure(double altitude);
+    public static double GetTemperature(double altitude);
 }
 
-// Throttle control system
-public class ThrottleController : Node
+// Aerodynamic drag system
+public class AerodynamicDrag : Node
 {
-    // Input handling and throttle management
-    public static void ProcessThrottleInput(InputEvent input);
-    public static void SetThrottle(double throttleLevel);
-    public static double GetCurrentThrottle();
+    // Drag force calculations and application
+    public static Vector3 CalculateDragForce(Part part, Vector3 velocity, double density);
+    public static void ApplyDragForces(PhysicsVessel vessel);
+}
+
+// Dynamic pressure and heating
+public class DynamicPressure : Node
+{
+    // Q calculations and structural effects
+    public static double CalculateQ(Vector3 velocity, double density);
+    public static void UpdateHeatingEffects(PhysicsVessel vessel);
 }
 ```
 
 ## Validation Commands
 
 After implementation:
-- "Test engine thrust generation with different throttle levels"
-- "Validate fuel consumption rates match theoretical calculations"
-- "Test fuel flow system with multiple tanks and crossfeed scenarios"
-- "Verify throttle control responsiveness and smooth transitions"
-- "Measure thrust visualization and exhaust effects performance"
+- "Test atmospheric density calculation at different altitudes"
+- "Validate drag forces produce correct terminal velocity"
+- "Test dynamic pressure tracking and auto-struts integration"
+- "Verify heating effects scale correctly with atmospheric conditions"
+- "Measure atmospheric system performance impact"
 
 ## Post-Completion Actions
 
@@ -157,17 +159,17 @@ After successful validation, Claude Code should:
 
 1. **Update completed-tasks.md** with:
    ```markdown
-   ### Task 11: Build thrust and fuel consumption system with realistic physics
+   ### Task 12: Build atmospheric model and aerodynamic drag system
    **Date**: [today's date]
    **Status**: ✅ Complete
    **Files Created/Modified**: [list files]
-   **Performance Results**: [thrust calculation timing and fuel consumption accuracy]
-   **Notes**: [thrust system validation results and physics integration success]
+   **Performance Results**: [atmospheric calculation timing and drag force accuracy]
+   **Notes**: [atmospheric physics validation results and terminal velocity testing]
    ```
 
-2. **Update current-task.md** with Task 12 from tasks.md:
-   - Copy "Task 12: Build atmospheric model and aerodynamic drag system" from tasks.md
-   - Add relevant technical details about atmospheric physics implementation
+2. **Update current-task.md** with Task 13 from tasks.md:
+   - Copy "Task 13: Create flight camera system with smooth following" from tasks.md
+   - Add relevant technical details about camera system implementation
    - Include success criteria and performance targets
 
-3. **Report to user**: "Task 11 complete. Next task is: Build atmospheric model and aerodynamic drag system"
+3. **Report to user**: "Task 12 complete. Next task is: Create flight camera system with smooth following"

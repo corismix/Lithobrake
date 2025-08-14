@@ -59,7 +59,7 @@
   - Test joint separation 10 times in succession maintains physics stability without glitches
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7_
 
-- [ ] 7. Implement double-precision orbital mechanics system
+- [x] 7. Implement double-precision orbital mechanics system
   - Create OrbitalState.cs struct with double precision orbital elements and epoch field
   - Build CelestialBody.cs with homeworld constants: 600km radius, GM=3.5316e12, from UNIVERSE_CONSTANTS.cs
   - Implement gravity calculation with F=GMm/r² applied as physics force for off-rails, orbital propagation for on-rails
@@ -67,7 +67,7 @@
   - Test stable 100km circular orbit with <1% drift over 10 complete orbits
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7_
 
-- [ ] 8. Build centralized Kepler orbit solver and propagation system
+- [x] 8. Build centralized Kepler orbit solver and propagation system
   - Create Orbital/Kepler.cs with SolveElliptic() and SolveHyperbolic() methods using Newton-Raphson
   - Implement tolerance 1e-10 and max 16 iterations for both elliptical (e<1) and hyperbolic (e>=1) orbits
   - Add GetPositionAtTime() and GetVelocityAtTime() methods with vis-viva equation for velocity calculation
@@ -75,7 +75,7 @@
   - Create unit tests for both elliptical and hyperbolic branches with energy conservation validation
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7_
 
-- [ ] 9. Implement floating origin system for precision preservation
+- [x] 9. Implement floating origin system for precision preservation
   - Create FloatingOriginManager.cs as single owner with OnPreOriginShift, OnOriginShift, OnPostOriginShift events
   - Monitor distance from origin with 20km threshold, preserve velocities during shift
   - Implement IOriginShiftAware interface for subscriber systems to handle origin changes
@@ -83,7 +83,7 @@
   - Test floating origin maintains precision across multiple shifts without visual artifacts
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7_
 
-- [ ] 10. Create basic rocket parts system with initial 3-part catalog
+- [x] 10. Create basic rocket parts system with initial 3-part catalog
   - Design PartCatalog resource system using JSON format loaded from resources/parts/ with hot-reload support
   - Create Part.cs base class with DryMass, FuelMass, AttachTop, AttachBottom properties and Initialize() method
   - Implement three initial parts: CommandPod (100kg), FuelTank (500kg dry + 4500kg fuel), Engine (250kg, 200kN thrust, 280s Isp)
@@ -91,7 +91,7 @@
   - Build test rocket assembly with hardcoded 3-part stack, verify total mass = 5350kg
   - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7_
 
-- [ ] 11. Implement thrust and fuel consumption system
+- [x] 11. Implement thrust and fuel consumption system
   - Create Engine.cs with GetThrust() method using either thrust curves or mass flow rate with Isp calculation
   - Implement fuel flow system with consumption = thrust / (Isp * g0) and fuel depletion tracking
   - Build fuel tank drainage with tree traversal from bottom to top, crossfeed blocking at decouplers

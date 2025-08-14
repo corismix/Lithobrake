@@ -19,6 +19,7 @@ namespace Lithobrake.Core
         public double GimbalRange { get; set; } = 5.0; // Degrees
         
         // Engine state
+        public EngineState State { get; private set; } = EngineState.Shutdown;
         public bool IsActive { get; set; } = false;
         public double CurrentThrottle { get; set; } = 0.0; // 0-1
         public double CurrentThrust { get; private set; } = 0.0; // Newtons
@@ -161,6 +162,9 @@ namespace Lithobrake.Core
         /// </summary>
         private void ProcessThrottleControl(double delta)
         {
+            // Update engine state based on conditions
+            UpdateEngineState(delta);
+            
             // Handle throttle changes
             if (Math.Abs(CurrentThrottle - _targetThrottle) > 0.001)
             {
@@ -197,6 +201,103 @@ namespace Lithobrake.Core
         }
         
         /// <summary>
+        /// Update engine state based on current conditions
+        /// </summary>
+        private void UpdateEngineState(double delta)
+        {
+            var previousState = State;
+            
+            if (!HasFuel)
+            {
+                State = EngineState.Flameout;
+                if (previousState != EngineState.Flameout)
+                {
+                    IsActive = false;
+                    SetThrottle(0.0);
+                    GD.Print($"Engine: Flameout - no fuel available");
+                }
+            }
+            else if (!IsActive || _targetThrottle < MinThrottleForIgnition)
+            {
+                State = EngineState.Shutdown;
+            }
+            else if (_engineWarmup < 0.95)
+            {
+                State = EngineState.Igniting;
+            }
+            else if (_isSpoolingUp)
+            {
+                State = EngineState.SpoolingUp;
+            }
+            else if (_isSpoolingDown)
+            {
+                State = EngineState.SpoolingDown;
+            }
+            else if (CurrentThrottle > MinThrottleForIgnition)
+            {
+                State = EngineState.Running;
+            }
+            else
+            {
+                State = EngineState.Idle;
+            }
+            
+            // Log state changes
+            if (State != previousState)
+            {
+                GD.Print($"Engine: State changed from {previousState} to {State}");
+            }
+        }
+        
+        /// <summary>
+        /// Get current thrust output based on conditions
+        /// Uses realistic rocket equation: F = mass_flow * exhaust_velocity
+        /// </summary>
+        public double GetThrust(double throttle, double atmosphericPressure)
+        {
+            if (!IsActive || !HasFuel || throttle < MinThrottleForIgnition)
+                return 0.0;
+            
+            // Calculate mass flow rate from throttle setting
+            var massFlowRate = GetMassFlowRate(throttle);
+            
+            // Calculate effective exhaust velocity based on atmospheric pressure
+            var exhaustVelocity = GetEffectiveExhaustVelocity(atmosphericPressure);
+            
+            // Apply engine warmup factor
+            var warmupFactor = _engineWarmup;
+            
+            // Rocket equation: F = mass_flow * exhaust_velocity
+            return massFlowRate * exhaustVelocity * warmupFactor;
+        }
+        
+        /// <summary>
+        /// Get mass flow rate at given throttle setting (kg/s)
+        /// </summary>
+        private double GetMassFlowRate(double throttle)
+        {
+            return FuelConsumption * Math.Clamp(throttle, 0.0, 1.0);
+        }
+        
+        /// <summary>
+        /// Get effective exhaust velocity based on atmospheric pressure
+        /// Accounts for atmospheric back-pressure effects
+        /// </summary>
+        private double GetEffectiveExhaustVelocity(double atmosphericPressure)
+        {
+            var seaLevelPressure = 101325.0; // Pa
+            var pressureRatio = Math.Clamp(atmosphericPressure / seaLevelPressure, 0.0, 1.0);
+            
+            // Base exhaust velocity from specific impulse
+            var baseVelocity = SpecificImpulse * StandardGravity;
+            
+            // Atmospheric efficiency: higher efficiency in vacuum, lower at sea level
+            var atmosphericEfficiency = 0.85 + (0.15 * (1.0 - pressureRatio));
+            
+            return baseVelocity * atmosphericEfficiency;
+        }
+        
+        /// <summary>
         /// Process thrust generation
         /// </summary>
         private void ProcessThrustGeneration(double delta)
@@ -208,14 +309,11 @@ namespace Lithobrake.Core
                 return;
             }
             
-            // Calculate thrust based on throttle, warmup, and atmospheric conditions
-            var thrustMultiplier = CurrentThrottle * _engineWarmup;
-            
-            // Apply atmospheric efficiency (simple model)
+            // Get atmospheric pressure at current altitude
             var atmosphericPressure = GetAtmosphericPressure();
-            var thrustEfficiency = GetThrustEfficiency(atmosphericPressure);
             
-            CurrentThrust = MaxThrust * thrustMultiplier * thrustEfficiency;
+            // Calculate thrust using realistic physics
+            CurrentThrust = GetThrust(CurrentThrottle, atmosphericPressure);
             
             // Calculate thrust vector with gimbal
             var baseDirection = -Transform.Basis.Y; // Engine points down
@@ -417,6 +515,7 @@ namespace Lithobrake.Core
         {
             return new EngineStats
             {
+                State = State,
                 IsActive = IsActive,
                 CurrentThrottle = CurrentThrottle,
                 CurrentThrust = CurrentThrust,
@@ -525,6 +624,7 @@ namespace Lithobrake.Core
     /// </summary>
     public struct EngineStats
     {
+        public EngineState State;
         public bool IsActive;
         public double CurrentThrottle;
         public double CurrentThrust;
@@ -535,5 +635,19 @@ namespace Lithobrake.Core
         public bool HasFuel;
         public Vector3 GimbalAngle;
         public double EngineWarmup;
+    }
+    
+    /// <summary>
+    /// Engine operational states
+    /// </summary>
+    public enum EngineState
+    {
+        Shutdown,     // Engine is off
+        Igniting,     // Engine is starting up (warmup phase)
+        Idle,         // Engine is running at minimal throttle
+        SpoolingUp,   // Engine is increasing thrust
+        Running,      // Engine is operating normally
+        SpoolingDown, // Engine is decreasing thrust
+        Flameout      // Engine has run out of fuel
     }
 }

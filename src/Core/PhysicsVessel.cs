@@ -66,6 +66,13 @@ namespace Lithobrake.Core
         // Floating origin system integration
         private bool _isOriginShiftRegistered = false;
         
+        // Thrust system integration
+        private readonly List<Engine> _engines = new();
+        private readonly List<FuelTank> _fuelTanks = new();
+        private double _currentThrottle = 0.0;
+        private double _lastThrustUpdate = 0.0;
+        private const double ThrustUpdateFrequency = 1.0 / 60.0; // 60Hz thrust updates
+        
         public override void _Ready()
         {
             GD.Print($"PhysicsVessel: Node ready, waiting for initialization");
@@ -491,6 +498,9 @@ namespace Lithobrake.Core
                 UpdateMassProperties();
                 UpdatePositionAndVelocity();
                 
+                // Process thrust and fuel systems
+                ProcessThrustAndFuel(delta);
+                
                 // Process anti-wobble system
                 ProcessAntiWobble((float)delta);
                 
@@ -641,6 +651,162 @@ namespace Lithobrake.Core
         public int GetJointCount()
         {
             return _joints.Count(j => j.IsActive && GodotObject.IsInstanceValid(j.Joint));
+        }
+        
+        /// <summary>
+        /// Process thrust and fuel systems for this vessel
+        /// </summary>
+        private void ProcessThrustAndFuel(double delta)
+        {
+            var currentTime = Time.GetUnixTimeFromSystem();
+            
+            // Throttle control updates
+            if (ThrottleController.Instance != null)
+            {
+                _currentThrottle = ThrottleController.Instance.GetCurrentThrottle();
+            }
+            
+            // Update engines and fuel tanks if time for thrust update
+            if (currentTime - _lastThrustUpdate >= ThrustUpdateFrequency)
+            {
+                UpdateEnginesAndFuelTanks();
+                
+                // Calculate and apply thrust forces
+                if (_engines.Count > 0)
+                {
+                    ProcessThrustForces(delta);
+                }
+                
+                // Process fuel flow and consumption
+                if (_engines.Count > 0 && _fuelTanks.Count > 0)
+                {
+                    ProcessFuelFlow(delta);
+                }
+                
+                // Update visual effects
+                UpdateEngineEffects();
+                
+                _lastThrustUpdate = currentTime;
+            }
+        }
+        
+        /// <summary>
+        /// Process thrust forces for all engines
+        /// </summary>
+        private void ProcessThrustForces(double delta)
+        {
+            // Get atmospheric pressure for thrust efficiency calculations
+            var altitude = GlobalPosition.Y;
+            var atmosphericPressure = GetAtmosphericPressure(altitude);
+            
+            // Calculate thrust for all engines
+            var thrustResult = ThrustSystem.CalculateVesselThrust(_engines, _currentThrottle, atmosphericPressure);
+            
+            // Apply thrust forces to physics bodies
+            ThrustSystem.ApplyThrustForces(this, thrustResult);
+        }
+        
+        /// <summary>
+        /// Process fuel flow and consumption
+        /// </summary>
+        private void ProcessFuelFlow(double delta)
+        {
+            // Update fuel flow between tanks and engines
+            var fuelResult = FuelFlowSystem.UpdateFuelFlow(_engines, _fuelTanks, delta);
+            
+            // Handle fuel starvation events
+            foreach (var starvationEvent in fuelResult.StarvationEvents)
+            {
+                GD.PrintErr($"PhysicsVessel {_vesselId}: Engine {starvationEvent.Engine.PartName} starved of fuel");
+                starvationEvent.Engine.SetActive(false);
+            }
+            
+            // Update mass properties if fuel consumed
+            if (fuelResult.TotalFuelConsumed > 0.1) // Threshold to avoid excessive updates
+            {
+                _massPropertiesDirty = true;
+            }
+        }
+        
+        /// <summary>
+        /// Update engine visual effects
+        /// </summary>
+        private void UpdateEngineEffects()
+        {
+            if (EffectsManager.Instance == null)
+                return;
+            
+            var altitude = GlobalPosition.Y;
+            var atmosphericPressure = GetAtmosphericPressure(altitude);
+            
+            foreach (var engine in _engines)
+            {
+                // Update exhaust effects
+                EffectsManager.Instance.UpdateEngineExhaust(engine, _currentThrottle, atmosphericPressure);
+                
+                // Update thrust visualization
+                var thrust = engine.GetThrust(_currentThrottle, atmosphericPressure);
+                var efficiency = thrust / engine.MaxThrust; // Simple efficiency calculation
+                EffectsManager.Instance.UpdateThrustVisualization(engine, thrust, efficiency);
+            }
+        }
+        
+        /// <summary>
+        /// Update lists of engines and fuel tanks from vessel parts
+        /// </summary>
+        private void UpdateEnginesAndFuelTanks()
+        {
+            // Update engines list
+            _engines.Clear();
+            _fuelTanks.Clear();
+            
+            // Find engines and fuel tanks among vessel parts
+            foreach (var part in _parts)
+            {
+                if (!part.IsActive || !GodotObject.IsInstanceValid(part.RigidBody))
+                    continue;
+                
+                // Look for Engine components
+                var engineNodes = part.RigidBody.GetChildren().OfType<Engine>().ToList();
+                foreach (var engine in engineNodes)
+                {
+                    if (!engine.IsQueuedForDeletion())
+                    {
+                        _engines.Add(engine);
+                        
+                        // Register engine with throttle controller
+                        if (ThrottleController.Instance != null)
+                        {
+                            ThrottleController.Instance.RegisterEngine(engine);
+                        }
+                    }
+                }
+                
+                // Look for FuelTank components
+                var fuelTankNodes = part.RigidBody.GetChildren().OfType<FuelTank>().ToList();
+                foreach (var tank in fuelTankNodes)
+                {
+                    if (!tank.IsQueuedForDeletion())
+                    {
+                        _fuelTanks.Add(tank);
+                    }
+                }
+            }
+            
+            GD.Print($"PhysicsVessel {_vesselId}: Found {_engines.Count} engines and {_fuelTanks.Count} fuel tanks");
+        }
+        
+        /// <summary>
+        /// Get atmospheric pressure at given altitude (simple model)
+        /// </summary>
+        /// <param name="altitude">Altitude in meters</param>
+        /// <returns>Atmospheric pressure in Pa</returns>
+        private double GetAtmosphericPressure(double altitude)
+        {
+            var seaLevelPressure = 101325.0; // Pa
+            var scaleHeight = 7500.0; // m
+            
+            return seaLevelPressure * Math.Exp(-altitude / scaleHeight);
         }
         
         /// <summary>
