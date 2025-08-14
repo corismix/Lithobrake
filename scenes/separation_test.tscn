@@ -1,0 +1,277 @@
+[gd_scene load_steps=4 format=3]
+
+[sub_resource type="GDScript" id="GDScript_1"]
+script/source = "extends Node3D
+
+# Joint separation test scene with 10 successive separation tests
+# Tests physics stability and separation system performance
+
+@onready var physics_manager: Node3D = $PhysicsManager
+@onready var test_results_label: Label = $UI/TestResults
+
+var physics_vessel: Object = null
+var separation_test_active: bool = false
+var current_test: int = 0
+var total_tests: int = 10
+var test_results: Array[String] = []
+var test_start_time: float = 0.0
+
+func _ready():
+	print(\"Joint separation test scene loaded\")
+	# Initialize physics manager and create test vessel
+	setup_test_vessel()
+	
+func setup_test_vessel():
+	# Create a simple test vessel with multiple parts and joints
+	if physics_manager.has_method(\"create_vessel\"):
+		physics_vessel = physics_manager.call(\"create_vessel\")
+		
+		if physics_vessel != null:
+			# Add test parts in a line (simulating rocket stack)
+			for i in range(5):
+				var rigid_body = RigidBody3D.new()
+				var collision_shape = CollisionShape3D.new()
+				var box_shape = BoxShape3D.new()
+				box_shape.size = Vector3(1.0, 0.5, 1.0)
+				collision_shape.shape = box_shape
+				rigid_body.add_child(collision_shape)
+				add_child(rigid_body)
+				
+				# Position parts vertically
+				rigid_body.global_position = Vector3(0, i * 0.6, 0)
+				
+				# Add part to vessel
+				var local_pos = Vector3(0, i * 0.6, 0)
+				physics_vessel.call(\"add_part\", rigid_body, 100.0, local_pos) # 100kg parts
+			
+			# Create joints between adjacent parts
+			for i in range(4):
+				physics_vessel.call(\"create_joint\", i, i + 1, 3) # JointType.Separable
+			
+			print(\"Test vessel created with 5 parts and 4 separable joints\")
+	else:
+		print(\"ERROR: PhysicsManager does not have create_vessel method\")
+
+func _input(event):
+	if event.is_action_pressed(\"ui_accept\") and not separation_test_active:
+		start_separation_tests()
+	elif event.is_action_pressed(\"ui_select\") and not separation_test_active:
+		reset_test_vessel()
+
+func start_separation_tests():
+	if physics_vessel == null:
+		print(\"ERROR: No physics vessel available for testing\")
+		return
+		
+	separation_test_active = true
+	current_test = 0
+	test_results.clear()
+	test_start_time = Time.get_time_dict_from_system()[\"unix\"]
+	
+	print(\"Starting 10 successive joint separation tests\")
+	test_results_label.text = \"Running separation tests...\"
+	
+	# Start the test sequence
+	perform_separation_test()
+
+func perform_separation_test():
+	if current_test >= total_tests:
+		complete_separation_tests()
+		return
+		
+	current_test += 1
+	print(f\"Running separation test {current_test}/{total_tests}\")
+	
+	# Get available joints
+	var joint_count = physics_vessel.call(\"get_joint_count\")
+	if joint_count == 0:
+		test_results.append(f\"Test {current_test}: SKIP - No joints remaining\")
+		await get_tree().process_frame
+		perform_separation_test()
+		return
+	
+	# Find first active joint
+	var joints = physics_vessel.call(\"get_joints\")
+	var active_joint_id = -1
+	for i in range(joints.size()):
+		if joints[i].IsActive:
+			active_joint_id = i
+			break
+	
+	if active_joint_id == -1:
+		test_results.append(f\"Test {current_test}: SKIP - No active joints\")
+		await get_tree().process_frame
+		perform_separation_test()
+		return
+	
+	# Record pre-separation state
+	var pre_mass = physics_vessel.call(\"get_mass_properties\")
+	var pre_joint_count = physics_vessel.call(\"get_joint_count\")
+	
+	# Perform atomic separation
+	var separation_success = physics_vessel.call(\"separate_at_joint\", active_joint_id)
+	
+	# Wait one frame for physics to settle
+	await get_tree().process_frame
+	
+	# Record post-separation state
+	var post_mass = physics_vessel.call(\"get_mass_properties\")
+	var post_joint_count = physics_vessel.call(\"get_joint_count\")
+	
+	# Get separation metrics
+	var metrics = physics_vessel.call(\"get_latest_separation_metrics\")
+	
+	# Validate results
+	var test_passed = true
+	var error_message = \"\"
+	
+	if not separation_success:
+		test_passed = false
+		error_message = \"Separation failed\"
+	elif post_joint_count != pre_joint_count - 1:
+		test_passed = false
+		error_message = f\"Joint count incorrect: {pre_joint_count} -> {post_joint_count}\"
+	elif metrics == null:
+		test_passed = false
+		error_message = \"No separation metrics available\"
+	elif metrics.OperationTime > 0.2: # 0.2ms performance target
+		test_passed = false
+		error_message = f\"Operation too slow: {metrics.OperationTime:.3f}ms\"
+	
+	# Record test result
+	var result_text = f\"Test {current_test}: \"
+	if test_passed:
+		result_text += f\"PASS ({metrics.OperationTime:.3f}ms)\"
+	else:
+		result_text += f\"FAIL - {error_message}\"
+	
+	test_results.append(result_text)
+	print(result_text)
+	
+	# Wait a bit before next test
+	await get_tree().create_timer(0.1).timeout
+	
+	# Continue with next test
+	perform_separation_test()
+
+func complete_separation_tests():
+	separation_test_active = false
+	var total_time = Time.get_time_dict_from_system()[\"unix\"] - test_start_time
+	
+	# Calculate test statistics
+	var passed_tests = 0
+	for result in test_results:
+		if \"PASS\" in result:
+			passed_tests += 1
+	
+	var success_rate = float(passed_tests) / float(test_results.size()) * 100.0
+	
+	# Get overall separation performance stats
+	var perf_stats = physics_vessel.call(\"get_separation_performance_stats\")
+	
+	# Display final results
+	var final_report = f\"\"\"JOINT SEPARATION TEST RESULTS:
+Total Tests: {test_results.size()}
+Passed: {passed_tests}
+Success Rate: {success_rate:.1f}%
+Total Time: {total_time:.1f}s
+
+Performance Statistics:
+Average Operation Time: {perf_stats.AverageOperationTime:.3f}ms
+Max Operation Time: {perf_stats.MaxOperationTime:.3f}ms
+Min Operation Time: {perf_stats.MinOperationTime:.3f}ms
+
+Individual Test Results:
+{\"\\n\".join(test_results)}
+
+Press ENTER to restart tests
+Press SPACE to reset vessel\"\"\"
+	
+	test_results_label.text = final_report
+	print(final_report)
+	print(\"\\nJoint separation tests completed\")
+
+func reset_test_vessel():
+	print(\"Resetting test vessel\")
+	
+	# Clean up existing vessel
+	if physics_vessel != null:
+		physics_vessel.call(\"cleanup\")
+		physics_vessel = null
+	
+	# Remove existing rigid bodies
+	for child in get_children():
+		if child is RigidBody3D:
+			child.queue_free()
+	
+	# Wait a frame then recreate
+	await get_tree().process_frame
+	setup_test_vessel()
+	
+	test_results_label.text = \"Test vessel reset. Press ENTER to start tests.\"
+"
+
+[sub_resource type="Environment" id="Environment_1"]
+background_mode = 1
+background_color = Color(0.2, 0.2, 0.3, 1)
+ambient_light_source = 2
+ambient_light_color = Color(1, 1, 1, 1)
+ambient_light_energy = 0.3
+
+[sub_resource type="LabelSettings" id="LabelSettings_1"]
+font_size = 12
+font_color = Color(1, 1, 1, 1)
+outline_size = 1
+outline_color = Color(0, 0, 0, 1)
+
+[node name="SeparationTestScene" type="Node3D"]
+script = SubResource("GDScript_1")
+
+[node name="PhysicsManager" type="Node3D" parent="."]
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(0.707107, -0.5, 0.5, 0, 0.707107, 0.707107, -0.707107, -0.5, 0.5, 8, 6, 8)
+fov = 60.0
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.707107, -0.5, 0.5, 0.5, 0.707107, 0.5, -0.707107, 0, 0.707107, 0, 5, 0)
+light_energy = 1.0
+shadow_enabled = true
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_1")
+
+[node name="UI" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="TestResults" type="Label" parent="UI"]
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 10.0
+offset_top = -200.0
+offset_right = 600.0
+offset_bottom = -10.0
+label_settings = SubResource("LabelSettings_1")
+text = "Joint Separation Test Scene
+Press ENTER to start 10 successive separation tests
+Press SPACE to reset test vessel"
+vertical_alignment = 3
+autowrap_mode = 2
+
+[node name="Instructions" type="Label" parent="UI"]
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 10.0
+offset_top = -30.0
+offset_right = 400.0
+offset_bottom = -10.0
+label_settings = SubResource("LabelSettings_1")
+text = "ENTER: Start Tests | SPACE: Reset Vessel"
+horizontal_alignment = 1

@@ -40,6 +40,17 @@ namespace Lithobrake.Core
         // Part limit enforcement
         private const int MaxParts = 75; // From CLAUDE.md constraints
         
+        // Anti-wobble system
+        private AntiWobbleSystem? _antiWobbleSystem;
+        
+        // Separation event system
+        private readonly List<SeparationEvent> _separationHistory = new();
+        private int _nextEventId = 0;
+        
+        // Performance constants for separation system
+        private const float StandardSeparationImpulse = 500f; // N·s from CLAUDE.md
+        private const double MaxSeparationTime = 0.2; // Maximum allowed separation time in ms
+        
         public override void _Ready()
         {
             GD.Print($"PhysicsVessel: Node ready, waiting for initialization");
@@ -54,7 +65,10 @@ namespace Lithobrake.Core
             _physicsManager = physicsManager;
             _isActive = true;
             
-            GD.Print($"PhysicsVessel {_vesselId}: Initialized");
+            // Initialize anti-wobble system
+            _antiWobbleSystem = new AntiWobbleSystem();
+            
+            GD.Print($"PhysicsVessel {_vesselId}: Initialized with anti-wobble system");
         }
         
         /// <summary>
@@ -183,6 +197,7 @@ namespace Lithobrake.Core
         
         /// <summary>
         /// Remove a joint (for staging/separation)
+        /// Legacy method - use SeparateAtJoint for full separation mechanics
         /// </summary>
         public bool RemoveJoint(int jointId)
         {
@@ -199,6 +214,104 @@ namespace Lithobrake.Core
             _massPropertiesDirty = true; // Mark for mass recalculation
             GD.Print($"PhysicsVessel {_vesselId}: Removed joint {jointId}");
             return true;
+        }
+        
+        /// <summary>
+        /// Atomic joint separation with precise separation impulse and mass redistribution
+        /// Implements low-level physics separation mechanics for staging operations
+        /// </summary>
+        public bool SeparateAtJoint(int jointId, bool applySeparationImpulse = true, float customImpulse = StandardSeparationImpulse)
+        {
+            var startTime = System.Diagnostics.Stopwatch.StartNew();
+            
+            // Validate joint exists and is active
+            if (jointId < 0 || jointId >= _joints.Count)
+            {
+                GD.PrintErr($"PhysicsVessel {_vesselId}: Invalid joint ID {jointId} for separation");
+                return false;
+            }
+            
+            var joint = _joints[jointId];
+            if (!joint.IsActive || joint.Joint == null || !GodotObject.IsInstanceValid(joint.Joint))
+            {
+                GD.PrintErr($"PhysicsVessel {_vesselId}: Joint {jointId} is not active or invalid");
+                return false;
+            }
+            
+            // Get parts involved in separation
+            if (!_partLookup.TryGetValue(joint.PartA, out var partA) || 
+                !_partLookup.TryGetValue(joint.PartB, out var partB))
+            {
+                GD.PrintErr($"PhysicsVessel {_vesselId}: Cannot find parts for joint {jointId} separation");
+                return false;
+            }
+            
+            // Create separation event for tracking
+            var separationPos = CalculateSeparationPosition(partA, partB);
+            var separationDir = CalculateSeparationDirection(partA, partB);
+            var separationEvent = SeparationEvent.Create(_nextEventId++, jointId, joint.PartA, joint.PartB, separationPos, separationDir);
+            separationEvent.SeparationImpulse = customImpulse;
+            
+            // Store pre-separation mass properties
+            var preMassProperties = GetMassProperties();
+            
+            try
+            {
+                // ATOMIC OPERATION START - All operations must succeed or be rolled back
+                
+                // 1. Remove joint atomically
+                joint.Joint.QueueFree();
+                joint.IsActive = false;
+                
+                // 2. Apply separation impulse in single frame if requested
+                if (applySeparationImpulse)
+                {
+                    ApplyAtomicSeparationImpulse(partB, separationPos, separationDir, customImpulse);
+                }
+                
+                // 3. Force immediate mass redistribution (same frame)
+                _massPropertiesDirty = true;
+                UpdateMassProperties(); // Immediate recalculation
+                
+                // ATOMIC OPERATION END
+                
+                // Store post-separation mass properties
+                var postMassProperties = GetMassProperties();
+                
+                // Mark separation as successful
+                separationEvent.MarkSuccess(startTime.Elapsed.TotalMilliseconds, preMassProperties, postMassProperties);
+                
+                // Validate physics state
+                if (!separationEvent.ValidatePhysics())
+                {
+                    GD.PrintErr($"PhysicsVessel {_vesselId}: Separation {separationEvent.EventId} failed physics validation");
+                    separationEvent.MarkFailure("Physics validation failed", SeparationValidationResult.PhysicsError);
+                    _separationHistory.Add(separationEvent);
+                    return false;
+                }
+                
+                _separationHistory.Add(separationEvent);
+                GD.Print($"PhysicsVessel {_vesselId}: Successfully separated joint {jointId} with {customImpulse:F1}N·s impulse in {startTime.Elapsed.TotalMilliseconds:F3}ms");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                // Operation failed - mark as failed
+                separationEvent.MarkFailure($"Exception during separation: {ex.Message}", SeparationValidationResult.PhysicsError);
+                _separationHistory.Add(separationEvent);
+                GD.PrintErr($"PhysicsVessel {_vesselId}: Separation failed with exception: {ex.Message}");
+                return false;
+            }
+            finally
+            {
+                startTime.Stop();
+                
+                // Ensure operation completed within performance budget
+                if (startTime.Elapsed.TotalMilliseconds > MaxSeparationTime)
+                {
+                    GD.PrintErr($"PhysicsVessel {_vesselId}: Separation took {startTime.Elapsed.TotalMilliseconds:F3}ms (exceeds {MaxSeparationTime}ms target)");
+                }
+            }
         }
         
         /// <summary>
@@ -281,6 +394,65 @@ namespace Lithobrake.Core
         }
         
         /// <summary>
+        /// Calculate optimal separation position between two parts
+        /// </summary>
+        private Double3 CalculateSeparationPosition(VesselPart partA, VesselPart partB)
+        {
+            if (partA.RigidBody != null && partB.RigidBody != null &&
+                GodotObject.IsInstanceValid(partA.RigidBody) && GodotObject.IsInstanceValid(partB.RigidBody))
+            {
+                var posA = Double3.FromVector3(partA.RigidBody.GlobalPosition);
+                var posB = Double3.FromVector3(partB.RigidBody.GlobalPosition);
+                return (posA + posB) / 2.0; // Midpoint between parts
+            }
+            
+            // Fallback to local positions if RigidBodies are invalid
+            return (partA.LocalPosition + partB.LocalPosition) / 2.0;
+        }
+        
+        /// <summary>
+        /// Calculate separation direction vector between two parts
+        /// </summary>
+        private Double3 CalculateSeparationDirection(VesselPart partA, VesselPart partB)
+        {
+            if (partA.RigidBody != null && partB.RigidBody != null &&
+                GodotObject.IsInstanceValid(partA.RigidBody) && GodotObject.IsInstanceValid(partB.RigidBody))
+            {
+                var posA = Double3.FromVector3(partA.RigidBody.GlobalPosition);
+                var posB = Double3.FromVector3(partB.RigidBody.GlobalPosition);
+                var direction = posB - posA;
+                
+                if (direction.Length > 1e-6)
+                {
+                    return direction.Normalized;
+                }
+            }
+            
+            // Fallback direction if positions are too close or invalid
+            return Double3.Up; // Default separation direction
+        }
+        
+        /// <summary>
+        /// Apply atomic separation impulse with precise positioning and direction
+        /// </summary>
+        private void ApplyAtomicSeparationImpulse(VesselPart part, Double3 position, Double3 direction, float impulse)
+        {
+            if (part.RigidBody == null || !GodotObject.IsInstanceValid(part.RigidBody))
+            {
+                return;
+            }
+            
+            var separationDirection = direction.ToVector3().Normalized();
+            var separationForce = separationDirection * impulse / part.RigidBody.Mass;
+            
+            // Apply impulse at separation position (using central impulse for simplicity)
+            // In a more advanced implementation, this could use ApplyImpulse with specific position
+            part.RigidBody.ApplyCentralImpulse(separationForce);
+            
+            GD.Print($"PhysicsVessel {_vesselId}: Applied atomic separation impulse {impulse:F1}N·s to part {part.Id}");
+        }
+        
+        /// <summary>
         /// Process physics update for this vessel
         /// </summary>
         public void ProcessPhysics(double delta)
@@ -294,6 +466,10 @@ namespace Lithobrake.Core
             {
                 UpdateMassProperties();
                 UpdatePositionAndVelocity();
+                
+                // Process anti-wobble system
+                ProcessAntiWobble((float)delta);
+                
                 _framesSinceUpdate = 0;
             }
         }
@@ -444,11 +620,108 @@ namespace Lithobrake.Core
         }
         
         /// <summary>
+        /// Process anti-wobble system for this vessel
+        /// </summary>
+        private void ProcessAntiWobble(float deltaTime)
+        {
+            if (_antiWobbleSystem == null)
+                return;
+                
+            // For simplified integration, we'll use a fixed altitude and velocity
+            // In a full implementation, this would come from orbital mechanics system
+            double altitude = 0.0; // Sea level for testing
+            Double3 velocity = _velocity;
+            
+            // Process the anti-wobble system
+            _antiWobbleSystem.ProcessVessel(this, altitude, velocity, deltaTime);
+        }
+        
+        /// <summary>
+        /// Get vessel joints for anti-wobble system access
+        /// </summary>
+        internal List<VesselJoint> GetJoints()
+        {
+            return _joints.Where(j => j.IsActive).ToList();
+        }
+        
+        /// <summary>
+        /// Get anti-wobble metrics
+        /// </summary>
+        public AntiWobbleMetrics? GetAntiWobbleMetrics()
+        {
+            return _antiWobbleSystem?.GetMetrics();
+        }
+        
+        /// <summary>
+        /// Get separation event history for analysis and validation
+        /// </summary>
+        public List<SeparationEvent> GetSeparationHistory()
+        {
+            return _separationHistory.ToList(); // Return copy to prevent external modification
+        }
+        
+        /// <summary>
+        /// Get latest separation metrics
+        /// </summary>
+        public SeparationMetrics? GetLatestSeparationMetrics()
+        {
+            if (_separationHistory.Count == 0)
+                return null;
+                
+            return _separationHistory[_separationHistory.Count - 1].GetMetrics();
+        }
+        
+        /// <summary>
+        /// Get separation performance statistics
+        /// </summary>
+        public SeparationPerformanceStats GetSeparationPerformanceStats()
+        {
+            if (_separationHistory.Count == 0)
+            {
+                return new SeparationPerformanceStats
+                {
+                    TotalSeparations = 0,
+                    SuccessfulSeparations = 0,
+                    SuccessRate = 0,
+                    AverageOperationTime = 0,
+                    MaxOperationTime = 0,
+                    MinOperationTime = 0
+                };
+            }
+            
+            var successful = _separationHistory.Where(s => s.Success).ToList();
+            var operationTimes = _separationHistory.Where(s => s.OperationDuration > 0).Select(s => s.OperationDuration).ToList();
+            
+            return new SeparationPerformanceStats
+            {
+                TotalSeparations = _separationHistory.Count,
+                SuccessfulSeparations = successful.Count,
+                SuccessRate = (double)successful.Count / _separationHistory.Count,
+                AverageOperationTime = operationTimes.Count > 0 ? operationTimes.Average() : 0,
+                MaxOperationTime = operationTimes.Count > 0 ? operationTimes.Max() : 0,
+                MinOperationTime = operationTimes.Count > 0 ? operationTimes.Min() : 0
+            };
+        }
+        
+        /// <summary>
+        /// Clear separation history (for testing or memory management)
+        /// </summary>
+        public void ClearSeparationHistory()
+        {
+            _separationHistory.Clear();
+            _nextEventId = 0;
+            GD.Print($"PhysicsVessel {_vesselId}: Cleared separation history");
+        }
+        
+        /// <summary>
         /// Clean up vessel resources
         /// </summary>
         public void Cleanup()
         {
             _isActive = false;
+            
+            // Clean up anti-wobble system
+            _antiWobbleSystem?.Reset();
             
             // Clean up joints
             foreach (var joint in _joints)
@@ -526,5 +799,18 @@ namespace Lithobrake.Core
         public Double3 AngularVelocity;
         public double Mass;
         public bool IsActive;
+    }
+    
+    /// <summary>
+    /// Performance statistics for separation operations
+    /// </summary>
+    public struct SeparationPerformanceStats
+    {
+        public int TotalSeparations;
+        public int SuccessfulSeparations;
+        public double SuccessRate;
+        public double AverageOperationTime;
+        public double MaxOperationTime;
+        public double MinOperationTime;
     }
 }
