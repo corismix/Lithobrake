@@ -1,6 +1,6 @@
 # Implementation Plan
 
-- [ ] 0.5. Verify Godot 4.4.1 C# API Surface and Performance Characteristics
+- [x] 0.5. Verify Godot 4.4.1 C# API Surface and Performance Characteristics
   - Verify Engine.TimeScale exists and behavior for time warp functionality
   - Verify Engine.PhysicsTicksPerSecond exists for 60Hz physics configuration
   - Test Vector3/Transform3D marshaling performance and document actual overhead
@@ -9,7 +9,7 @@
   - Create performance baseline measurements on target hardware (MacBook Air M4)
   - _Requirements: 1.5, 7.1, 10.6_
 
-- [ ] 1. Setup C#/GDScript integration foundation and validate performance characteristics
+- [x] 1. Setup C#/GDScript integration foundation and validate performance characteristics
   - Create C# test node inheriting from Node3D with basic Update() method
   - Implement Double3 struct for orbital calculations with conversion utilities to Godot.Vector3
   - Build PerformanceMonitor.cs singleton to track frame time, physics time, script time with overlay display
@@ -18,7 +18,7 @@
   - Document UI performance boundary rules: C# aggregates state, emits one packed signal per frame to GDScript
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7_
 
-- [ ] 2. Configure Godot project structure and C# compilation environment
+- [x] 2. Configure Godot project structure and C# compilation environment
   - Verify Godot 4.4.1 and .NET 8.0 SDK installation with C# support enabled
   - Create directory structure: src/Core/, src/Scripts/, scenes/, resources/parts/, resources/materials/
   - Configure project.godot settings for Metal renderer, 60Hz physics, Jolt engine, assembly name 'Lithobrake'
@@ -27,7 +27,7 @@
   - Create COORDINATES.md and DETERMINISM.md documentation files
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7_
 
-- [ ] 3. Implement core physics system with Jolt integration
+- [x] 3. Implement core physics system with Jolt integration
   - Configure Jolt physics engine in project settings with 60Hz fixed timestep and continuous collision detection
   - Create PhysicsManager.cs singleton with FixedDelta constant, PhysicsServer3D reference, and vessel registration
   - Implement PhysicsVessel.cs class with parts list, joints list, mass properties calculation methods
@@ -35,7 +35,7 @@
   - Add collision layers configuration and basic rigid body performance testing
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7_
 
-- [ ] 4. Build multi-part vessel system with joint connections
+- [x] 4. Build multi-part vessel system with joint connections
   - Extend PhysicsVessel.cs to handle multiple RigidBody3D parts connected by Joint3D
   - Implement joint system using Generic6DOFJoint3D with JointTuning struct for stiffness/damping parameters
   - Create mass aggregation system to calculate total mass, center of mass, and moment of inertia tensor
