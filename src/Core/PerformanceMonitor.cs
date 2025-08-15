@@ -99,7 +99,7 @@ namespace Lithobrake.Core
         /// <summary>
         /// Access singleton instance safely
         /// </summary>
-        public static new bool IsInstanceValid => _lazyInstance.IsValueCreated && GodotObject.IsInstanceValid(_lazyInstance.Value);
+        public static new bool IsInstanceValid => _lazyInstance.IsValueCreated && SafeOperations.IsValid(_lazyInstance.Value, "PerformanceMonitor.Instance");
         
         public override void _Process(double delta)
         {
@@ -338,6 +338,31 @@ namespace Lithobrake.Core
                 SignalMarshalingTime = _signalMarshalingTime,
                 GcCollectionCount = _gcCollectionCount
             };
+        }
+        
+        /// <summary>
+        /// Cleanup resources when exiting scene tree
+        /// </summary>
+        public override void _ExitTree()
+        {
+            // Stop all timers
+            _frameTimer.Stop();
+            _physicsTimer.Stop();
+            _scriptTimer.Stop();
+            
+            // Clear performance tracking
+            _frameTimeSamples.Clear();
+            _physicsTimeSamples.Clear();
+            _scriptTimeSamples.Clear();
+            
+            // Stopwatch doesn't implement IDisposable, just reset the references
+            _frameTimer.Reset();
+            _physicsTimer.Reset();
+            _scriptTimer.Reset();
+            
+            DebugLog.LogResource("PerformanceMonitor: Cleaned up on exit tree");
+            
+            base._ExitTree();
         }
     }
     

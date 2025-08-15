@@ -20,11 +20,11 @@ namespace Lithobrake.Core
         private const double PhysicsBudget = 5.0; // ms per frame budget
 
         // Physics server access (singleton)
-        private RigidBody3D? _testBody; // For initial testing
+        private ManagedGodotObject<RigidBody3D>? _managedTestBody; // For initial testing with lifecycle management
 
-        // Vessel management
-        private readonly Dictionary<int, PhysicsVessel> _registeredVessels = new();
-        private readonly List<PhysicsVessel> _activeVessels = new();
+        // Vessel management with lifecycle tracking
+        private readonly Dictionary<int, ManagedGodotObject<PhysicsVessel>> _registeredVessels = new();
+        private readonly List<ManagedGodotObject<PhysicsVessel>> _activeVessels = new();
         private int _nextVesselId = 1;
 
         // Performance monitoring
@@ -57,10 +57,11 @@ namespace Lithobrake.Core
             ConfigurePhysicsWorld();
             
             // Register with performance monitor
-            if (PerformanceMonitor.IsInstanceValid)
+            SafeOperations.TryExecute(() =>
             {
-                GD.Print("PhysicsManager: Registered with PerformanceMonitor");
-            }
+                var monitor = PerformanceMonitor.Instance;
+                DebugLog.Log("PhysicsManager: Registered with PerformanceMonitor");
+            }, "PhysicsManager.PerformanceMonitor.Registration");
             
             // Register with floating origin system (critical priority)
             FloatingOriginManager.RegisterOriginShiftAware(this);
@@ -109,21 +110,26 @@ namespace Lithobrake.Core
             // Process active vessels physics
             for (int i = _activeVessels.Count - 1; i >= 0; i--)
             {
-                var vessel = _activeVessels[i];
-                if (vessel == null || !GodotObject.IsInstanceValid(vessel))
+                var managedVessel = _activeVessels[i];
+                if (!managedVessel.IsUsable)
                 {
                     _activeVessels.RemoveAt(i);
+                    SafeOperations.SafeDispose(managedVessel, $"ActiveVessel[{i}]");
                     continue;
                 }
                 
-                vessel.ProcessPhysics(FixedDelta);
-                
-                // Monitor vessel position for floating origin shifts
-                var vesselState = vessel.GetVesselState();
-                if (vesselState.IsActive)
+                // Process physics safely
+                managedVessel.TryExecute(vessel =>
                 {
-                    FloatingOriginManager.MonitorOriginDistance(vesselState.Position);
-                }
+                    vessel.ProcessPhysics(FixedDelta);
+                    
+                    // Monitor vessel position for floating origin shifts
+                    var vesselState = vessel.GetVesselState();
+                    if (vesselState.IsActive)
+                    {
+                        FloatingOriginManager.MonitorOriginDistance(vesselState.Position);
+                    }
+                });
             }
         }
 
@@ -140,10 +146,11 @@ namespace Lithobrake.Core
             _averagePhysicsTime = sum / _physicsTimeSamples.Count;
             
             // Update performance monitor if available
-            if (PerformanceMonitor.IsInstanceValid)
+            SafeOperations.TryExecute(() =>
             {
                 // Performance monitor will track this automatically through _PhysicsProcess
-            }
+                var monitor = PerformanceMonitor.Instance;
+            }, "PhysicsManager.PerformanceMonitor.Update");
         }
 
         /// <summary>
@@ -152,12 +159,20 @@ namespace Lithobrake.Core
         public int RegisterVessel(PhysicsVessel vessel)
         {
             int vesselId = _nextVesselId++;
-            _registeredVessels[vesselId] = vessel;
-            _activeVessels.Add(vessel);
+            
+            var managedVessel = SafeOperations.CreateManaged(vessel, $"PhysicsVessel[{vesselId}]");
+            if (managedVessel == null)
+            {
+                DebugLog.LogError($"PhysicsManager: Failed to create managed vessel for vessel {vesselId}");
+                return -1; // Invalid ID to indicate failure
+            }
+            
+            _registeredVessels[vesselId] = managedVessel;
+            _activeVessels.Add(managedVessel);
             
             vessel.Initialize(vesselId, this);
             
-            GD.Print($"PhysicsManager: Registered vessel {vesselId} with {vessel.GetPartCount()} parts");
+            DebugLog.Log($"PhysicsManager: Registered vessel {vesselId} with {vessel.GetPartCount()} parts");
             return vesselId;
         }
 
@@ -166,13 +181,16 @@ namespace Lithobrake.Core
         /// </summary>
         public void UnregisterVessel(int vesselId)
         {
-            if (_registeredVessels.TryGetValue(vesselId, out var vessel))
+            if (_registeredVessels.TryGetValue(vesselId, out var managedVessel))
             {
                 _registeredVessels.Remove(vesselId);
-                _activeVessels.Remove(vessel);
+                _activeVessels.Remove(managedVessel);
                 
-                vessel.Cleanup();
-                GD.Print($"PhysicsManager: Unregistered vessel {vesselId}");
+                // Cleanup the vessel safely
+                managedVessel.TryExecute(vessel => vessel.Cleanup());
+                SafeOperations.SafeDispose(managedVessel, $"PhysicsVessel[{vesselId}]");
+                
+                DebugLog.Log($"PhysicsManager: Unregistered vessel {vesselId}");
             }
         }
 
@@ -181,14 +199,17 @@ namespace Lithobrake.Core
         /// </summary>
         public PhysicsVessel? GetVessel(int vesselId)
         {
-            _registeredVessels.TryGetValue(vesselId, out var vessel);
-            return vessel;
+            if (_registeredVessels.TryGetValue(vesselId, out var managedVessel))
+            {
+                return managedVessel.Object;
+            }
+            return null;
         }
 
         /// <summary>
         /// Create a test rigid body for physics validation
         /// </summary>
-        public RigidBody3D CreateTestBody()
+        public RigidBody3D? CreateTestBody()
         {
             var body = new RigidBody3D();
             var shape = new SphereShape3D();
@@ -203,9 +224,17 @@ namespace Lithobrake.Core
             body.CollisionMask = LayerStatic | LayerDynamic;
             
             AddChild(body);
-            _testBody = body;
             
-            GD.Print("PhysicsManager: Created test rigid body");
+            // Create managed wrapper for the test body
+            _managedTestBody = SafeOperations.CreateManaged(body, "PhysicsManager.TestBody");
+            if (_managedTestBody == null)
+            {
+                DebugLog.LogError("PhysicsManager: Failed to create managed test body");
+                SafeOperations.SafeQueueFree(body, "TestBody.Fallback");
+                return null;
+            }
+            
+            DebugLog.Log("PhysicsManager: Created test rigid body");
             return body;
         }
 
@@ -214,11 +243,11 @@ namespace Lithobrake.Core
         /// </summary>
         public void DestroyTestBody()
         {
-            if (_testBody != null && GodotObject.IsInstanceValid(_testBody))
+            if (_managedTestBody != null)
             {
-                _testBody.QueueFree();
-                _testBody = null;
-                GD.Print("PhysicsManager: Destroyed test rigid body");
+                SafeOperations.SafeDispose(_managedTestBody, "PhysicsManager.TestBody");
+                _managedTestBody = null;
+                DebugLog.Log("PhysicsManager: Destroyed test rigid body");
             }
         }
 
@@ -271,7 +300,7 @@ namespace Lithobrake.Core
         /// <summary>
         /// Check if singleton is valid
         /// </summary>
-        public static new bool IsInstanceValid => _lazyInstance.IsValueCreated && GodotObject.IsInstanceValid(_lazyInstance.Value);
+        public static new bool IsInstanceValid => _lazyInstance.IsValueCreated && SafeOperations.IsValid(_lazyInstance.Value, "PhysicsManager.Instance");
         
         /// <summary>
         /// Check if vessel should trigger coast period for origin shift
@@ -279,26 +308,37 @@ namespace Lithobrake.Core
         public bool IsInCoastPeriod()
         {
             // Check all active vessels for coast period conditions
-            foreach (var vessel in _activeVessels)
+            foreach (var managedVessel in _activeVessels)
             {
-                if (vessel == null || !GodotObject.IsInstanceValid(vessel))
+                if (!managedVessel.IsUsable)
                     continue;
                 
-                var (altitude, velocity, _, inAtmosphere) = vessel.GetOrbitalMetrics();
-                
-                if (inAtmosphere)
+                bool isInCoast = false;
+                managedVessel.TryExecute(vessel =>
                 {
-                    // Check dynamic pressure using atmospheric conditions
-                    var dynamicPressure = AtmosphericConditions.GetDynamicPressure(altitude, velocity);
+                    var (altitude, velocity, _, inAtmosphere) = vessel.GetOrbitalMetrics();
                     
-                    if (dynamicPressure > 1000.0) // 1 kPa max dynamic pressure for shifts
+                    if (inAtmosphere)
                     {
-                        return false;
+                        // Check dynamic pressure using atmospheric conditions
+                        var dynamicPressure = AtmosphericConditions.GetDynamicPressure(altitude, velocity);
+                        
+                        if (dynamicPressure > 1000.0) // 1 kPa max dynamic pressure for shifts
+                        {
+                            isInCoast = false;
+                            return;
+                        }
                     }
-                }
+                    
+                    // TODO: Add thrust checking when propulsion system is implemented
+                    // For now, assume coast period if dynamic pressure is low
+                    isInCoast = true;
+                });
                 
-                // TODO: Add thrust checking when propulsion system is implemented
-                // For now, assume coast period if dynamic pressure is low
+                if (!isInCoast)
+                {
+                    return false;
+                }
             }
             
             return true; // Safe to perform origin shift
@@ -320,12 +360,12 @@ namespace Lithobrake.Core
                 _worldOriginOffset += deltaPosition;
                 
                 // Update test body position if it exists
-                if (_testBody != null && GodotObject.IsInstanceValid(_testBody))
+                _managedTestBody?.TryExecute(testBody =>
                 {
-                    var currentPos = Double3.FromVector3(_testBody.GlobalPosition);
+                    var currentPos = Double3.FromVector3(testBody.GlobalPosition);
                     var newPos = currentPos + deltaPosition;
-                    _testBody.GlobalPosition = newPos.ToVector3();
-                }
+                    testBody.GlobalPosition = newPos.ToVector3();
+                });
                 
                 // Note: Vessels handle their own origin shifts through their IOriginShiftAware implementation
                 // PhysicsManager just needs to maintain physics world coherence
@@ -371,6 +411,40 @@ namespace Lithobrake.Core
         public Double3 GetWorldOriginOffset() => _worldOriginOffset;
         
         #endregion
+        
+        /// <summary>
+        /// Cleanup resources when exiting scene tree
+        /// </summary>
+        public override void _ExitTree()
+        {
+            // Cleanup all registered vessels
+            foreach (var managedVessel in _registeredVessels.Values)
+            {
+                managedVessel.TryExecute(vessel => vessel.Cleanup());
+                SafeOperations.SafeDispose(managedVessel, "PhysicsManager.ExitTree.Vessel");
+            }
+            _registeredVessels.Clear();
+            _activeVessels.Clear();
+            
+            // Cleanup test body
+            DestroyTestBody();
+            
+            // Unregister from floating origin system
+            if (_isOriginShiftRegistered)
+            {
+                FloatingOriginManager.UnregisterOriginShiftAware(this);
+            }
+            
+            // Clean up performance tracking
+            _physicsTimeSamples.Clear();
+            
+            // Perform complete lifecycle cleanup
+            ObjectLifecycleManager.PerformCompleteCleanup();
+            
+            DebugLog.LogResource("PhysicsManager: Cleaned up on exit tree");
+            
+            base._ExitTree();
+        }
     }
 
     /// <summary>

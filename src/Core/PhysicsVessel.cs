@@ -173,11 +173,10 @@ namespace Lithobrake.Core
                 return false;
             }
             
-            // Validate RigidBody objects are still valid
-            if (partARef.RigidBody == null || !GodotObject.IsInstanceValid(partARef.RigidBody) ||
-                partBRef.RigidBody == null || !GodotObject.IsInstanceValid(partBRef.RigidBody))
+            // Validate RigidBody objects are usable
+            if (!partARef.IsUsable || !partBRef.IsUsable)
             {
-                GD.PrintErr($"PhysicsVessel {_vesselId}: Cannot create joint - invalid RigidBody objects");
+                DebugLog.LogError($"PhysicsVessel {_vesselId}: Cannot create joint - parts not usable");
                 return false;
             }
             
@@ -229,9 +228,18 @@ namespace Lithobrake.Core
                 return false;
             }
             
-            // Configure joint
-            joint.NodeA = partARef.RigidBody.GetPath();
-            joint.NodeB = partBRef.RigidBody.GetPath();
+            // Configure joint using safe access
+            var nodeAPath = partARef.TryUseRigidBody<NodePath?>(rb => rb.GetPath());
+            var nodeBPath = partBRef.TryUseRigidBody<NodePath?>(rb => rb.GetPath());
+            
+            if (nodeAPath == null || nodeBPath == null)
+            {
+                DebugLog.LogError($"PhysicsVessel {_vesselId}: Failed to get node paths for joint creation");
+                return false;
+            }
+            
+            joint.NodeA = nodeAPath;
+            joint.NodeB = nodeBPath;
             
             AddChild(joint);
             
@@ -262,14 +270,12 @@ namespace Lithobrake.Core
                 return false;
                 
             var joint = _joints[jointId];
-            if (joint.Joint != null && GodotObject.IsInstanceValid(joint.Joint))
-            {
-                joint.Joint.QueueFree();
-            }
             
-            joint.IsActive = false;
+            // Use safe disposal
+            SafeOperations.SafeDispose(joint, $"VesselJoint[{jointId}]");
+            
             _massPropertiesDirty = true; // Mark for mass recalculation
-            GD.Print($"PhysicsVessel {_vesselId}: Removed joint {jointId}");
+            DebugLog.Log($"PhysicsVessel {_vesselId}: Removed joint {jointId}");
             return true;
         }
         
@@ -289,9 +295,9 @@ namespace Lithobrake.Core
             }
             
             var joint = _joints[jointId];
-            if (!joint.IsActive || joint.Joint == null || !GodotObject.IsInstanceValid(joint.Joint))
+            if (!joint.IsActive || !joint.IsUsable)
             {
-                GD.PrintErr($"PhysicsVessel {_vesselId}: Joint {jointId} is not active or invalid");
+                DebugLog.LogError($"PhysicsVessel {_vesselId}: Joint {jointId} is not active or usable");
                 return false;
             }
             
@@ -316,9 +322,8 @@ namespace Lithobrake.Core
             {
                 // ATOMIC OPERATION START - All operations must succeed or be rolled back
                 
-                // 1. Remove joint atomically
-                joint.Joint.QueueFree();
-                joint.IsActive = false;
+                // 1. Remove joint atomically using safe disposal
+                SafeOperations.SafeDispose(joint, $"VesselJoint[{jointId}]");
                 
                 // 2. Apply separation impulse in single frame if requested
                 if (applySeparationImpulse)
@@ -388,12 +393,15 @@ namespace Lithobrake.Core
                 .ToList();
             
             // Apply separation impulse if requested (for staging)
-            if (applySeparationImpulse && part.RigidBody != null && GodotObject.IsInstanceValid(part.RigidBody))
+            if (applySeparationImpulse && part.IsUsable)
             {
                 const float SeparationImpulse = 500f; // 500 N·s from CLAUDE.md
-                var separationForce = Vector3.Up * SeparationImpulse / part.RigidBody.Mass;
-                part.RigidBody.ApplyCentralImpulse(separationForce);
-                GD.Print($"PhysicsVessel {_vesselId}: Applied separation impulse to part {partId}");
+                part.TryUseRigidBody(rigidBody =>
+                {
+                    var separationForce = Vector3.Up * SeparationImpulse / rigidBody.Mass;
+                    rigidBody.ApplyCentralImpulse(separationForce);
+                    DebugLog.Log($"PhysicsVessel {_vesselId}: Applied separation impulse to part {partId}");
+                });
             }
             
             // Remove all connected joints atomically
@@ -425,17 +433,20 @@ namespace Lithobrake.Core
                 return;
                 
             var joint = _joints[jointId];
-            if (!joint.IsActive || joint.Joint == null || !GodotObject.IsInstanceValid(joint.Joint))
+            if (!joint.IsActive || !joint.IsUsable)
                 return;
                 
             joint.Tuning = newTuning;
             
             // Apply new tuning if it's a Generic6DOFJoint3D
-            if (joint.Joint is Generic6DofJoint3D dofJoint)
+            joint.TryUseJoint(jointObj =>
             {
-                newTuning.ApplyTo6DOFJoint(dofJoint);
-                GD.Print($"PhysicsVessel {_vesselId}: Updated joint {jointId} tuning parameters");
-            }
+                if (jointObj is Generic6DofJoint3D dofJoint)
+                {
+                    newTuning.ApplyTo6DOFJoint(dofJoint);
+                    DebugLog.Log($"PhysicsVessel {_vesselId}: Updated joint {jointId} tuning parameters");
+                }
+            });
         }
         
         /// <summary>
@@ -443,17 +454,18 @@ namespace Lithobrake.Core
         /// </summary>
         public void ApplySeparationImpulse(int partId, Vector3? direction = null, float impulse = 500f)
         {
-            if (!_partLookup.TryGetValue(partId, out var part) || 
-                part.RigidBody == null || !GodotObject.IsInstanceValid(part.RigidBody))
+            if (!_partLookup.TryGetValue(partId, out var part) || !part.IsUsable)
             {
                 return;
             }
             
             var separationDirection = direction ?? Vector3.Up;
-            var separationForce = separationDirection.Normalized() * impulse / part.RigidBody.Mass;
-            part.RigidBody.ApplyCentralImpulse(separationForce);
-            
-            GD.Print($"PhysicsVessel {_vesselId}: Applied {impulse}N·s separation impulse to part {partId}");
+            part.TryUseRigidBody(rigidBody =>
+            {
+                var separationForce = separationDirection.Normalized() * impulse / rigidBody.Mass;
+                rigidBody.ApplyCentralImpulse(separationForce);
+                DebugLog.Log($"PhysicsVessel {_vesselId}: Applied {impulse}N·s separation impulse to part {partId}");
+            });
         }
         
         /// <summary>
@@ -461,15 +473,18 @@ namespace Lithobrake.Core
         /// </summary>
         private Double3 CalculateSeparationPosition(VesselPart partA, VesselPart partB)
         {
-            if (partA.RigidBody != null && partB.RigidBody != null &&
-                GodotObject.IsInstanceValid(partA.RigidBody) && GodotObject.IsInstanceValid(partB.RigidBody))
+            if (partA.IsUsable && partB.IsUsable)
             {
-                var posA = Double3.FromVector3(partA.RigidBody.GlobalPosition);
-                var posB = Double3.FromVector3(partB.RigidBody.GlobalPosition);
+                var posA = partA.TryUseRigidBodyWithDefaultValue(
+                    rb => Double3.FromVector3(rb.GlobalPosition), 
+                    partA.LocalPosition);
+                var posB = partB.TryUseRigidBodyWithDefaultValue(
+                    rb => Double3.FromVector3(rb.GlobalPosition), 
+                    partB.LocalPosition);
                 return (posA + posB) / 2.0; // Midpoint between parts
             }
             
-            // Fallback to local positions if RigidBodies are invalid
+            // Fallback to local positions if RigidBodies are not usable
             return (partA.LocalPosition + partB.LocalPosition) / 2.0;
         }
         
@@ -478,11 +493,14 @@ namespace Lithobrake.Core
         /// </summary>
         private Double3 CalculateSeparationDirection(VesselPart partA, VesselPart partB)
         {
-            if (partA.RigidBody != null && partB.RigidBody != null &&
-                GodotObject.IsInstanceValid(partA.RigidBody) && GodotObject.IsInstanceValid(partB.RigidBody))
+            if (partA.IsUsable && partB.IsUsable)
             {
-                var posA = Double3.FromVector3(partA.RigidBody.GlobalPosition);
-                var posB = Double3.FromVector3(partB.RigidBody.GlobalPosition);
+                var posA = partA.TryUseRigidBodyWithDefaultValue(
+                    rb => Double3.FromVector3(rb.GlobalPosition), 
+                    partA.LocalPosition);
+                var posB = partB.TryUseRigidBodyWithDefaultValue(
+                    rb => Double3.FromVector3(rb.GlobalPosition), 
+                    partB.LocalPosition);
                 var direction = posB - posA;
                 
                 if (direction.Length > 1e-6)
@@ -491,7 +509,7 @@ namespace Lithobrake.Core
                 }
             }
             
-            // Fallback direction if positions are too close or invalid
+            // Fallback direction if positions are too close or parts not usable
             return Double3.Up; // Default separation direction
         }
         
@@ -500,19 +518,23 @@ namespace Lithobrake.Core
         /// </summary>
         private void ApplyAtomicSeparationImpulse(VesselPart part, Double3 position, Double3 direction, float impulse)
         {
-            if (part.RigidBody == null || !GodotObject.IsInstanceValid(part.RigidBody))
+            if (!part.IsUsable)
             {
                 return;
             }
             
             var separationDirection = direction.ToVector3().Normalized();
-            var separationForce = separationDirection * impulse / part.RigidBody.Mass;
             
-            // Apply impulse at separation position (using central impulse for simplicity)
-            // In a more advanced implementation, this could use ApplyImpulse with specific position
-            part.RigidBody.ApplyCentralImpulse(separationForce);
-            
-            GD.Print($"PhysicsVessel {_vesselId}: Applied atomic separation impulse {impulse:F1}N·s to part {part.Id}");
+            part.TryUseRigidBody(rigidBody =>
+            {
+                var separationForce = separationDirection * impulse / rigidBody.Mass;
+                
+                // Apply impulse at separation position (using central impulse for simplicity)
+                // In a more advanced implementation, this could use ApplyImpulse with specific position
+                rigidBody.ApplyCentralImpulse(separationForce);
+                
+                DebugLog.Log($"PhysicsVessel {_vesselId}: Applied atomic separation impulse {impulse:F1}N·s to part {part.Id}");
+            });
         }
         
         /// <summary>
@@ -557,11 +579,15 @@ namespace Lithobrake.Core
             // Calculate total mass and center of mass
             foreach (var part in _parts)
             {
-                if (!part.IsActive || !GodotObject.IsInstanceValid(part.RigidBody))
+                if (!part.IsActive || !part.IsUsable)
                     continue;
                     
                 _totalMass += part.Mass;
-                var partWorldPos = Double3.FromVector3(part.RigidBody.GlobalPosition);
+                
+                // Use safe access to get global position
+                var partWorldPos = part.TryUseRigidBodyWithDefaultValue(
+                    rb => Double3.FromVector3(rb.GlobalPosition), 
+                    part.LocalPosition);
                 weightedPosition += partWorldPos * part.Mass;
             }
             
@@ -574,12 +600,13 @@ namespace Lithobrake.Core
             var inertia = Double3.Zero;
             foreach (var part in _parts)
             {
-                if (!part.IsActive || !GodotObject.IsInstanceValid(part.RigidBody))
+                if (!part.IsActive || !part.IsUsable)
                     continue;
                     
-                var partPos = Double3.FromVector3(part.RigidBody.GlobalPosition);
+                var partPos = part.TryUseRigidBodyWithDefaultValue(
+                    rb => Double3.FromVector3(rb.GlobalPosition), 
+                    part.LocalPosition);
                 var relativePos = partPos - _centerOfMass;
-                var distanceSquared = relativePos.LengthSquared;
                 
                 // Simple point mass approximation
                 inertia.X += part.Mass * (relativePos.Y * relativePos.Y + relativePos.Z * relativePos.Z);
@@ -608,10 +635,13 @@ namespace Lithobrake.Core
             
             foreach (var part in _parts)
             {
-                if (!part.IsActive || !GodotObject.IsInstanceValid(part.RigidBody))
+                if (!part.IsActive || !part.IsUsable)
                     continue;
                     
-                totalVelocity += Double3.FromVector3(part.RigidBody.LinearVelocity);
+                var velocity = part.TryUseRigidBodyWithDefaultValue(
+                    rb => Double3.FromVector3(rb.LinearVelocity), 
+                    Double3.Zero);
+                totalVelocity += velocity;
                 activePartCount++;
             }
             
@@ -660,12 +690,15 @@ namespace Lithobrake.Core
             
             foreach (var part in _parts)
             {
-                if (!part.IsActive || !GodotObject.IsInstanceValid(part.RigidBody))
+                if (!part.IsActive || !part.IsUsable)
                     continue;
                     
-                var currentPos = Double3.FromVector3(part.RigidBody.GlobalPosition);
-                var newPos = currentPos + offset;
-                part.RigidBody.GlobalPosition = newPos.ToVector3();
+                part.TryUseRigidBody(rigidBody =>
+                {
+                    var currentPos = Double3.FromVector3(rigidBody.GlobalPosition);
+                    var newPos = currentPos + offset;
+                    rigidBody.GlobalPosition = newPos.ToVector3();
+                });
             }
             
             _position = newPosition;
@@ -677,7 +710,7 @@ namespace Lithobrake.Core
         /// </summary>
         public int GetPartCount()
         {
-            return _parts.Count(p => p.IsActive && GodotObject.IsInstanceValid(p.RigidBody));
+            return _parts.Count(p => p.IsActive && p.IsUsable);
         }
         
         /// <summary>
@@ -685,7 +718,7 @@ namespace Lithobrake.Core
         /// </summary>
         public int GetJointCount()
         {
-            return _joints.Count(j => j.IsActive && GodotObject.IsInstanceValid(j.Joint));
+            return _joints.Count(j => j.IsActive && j.IsUsable);
         }
         
         /// <summary>
@@ -791,23 +824,26 @@ namespace Lithobrake.Core
         /// </summary>
         private void CachePartComponents(VesselPart part)
         {
-            if (!GodotObject.IsInstanceValid(part.RigidBody))
+            if (!part.IsUsable)
                 return;
                 
             var engines = new List<Engine>();
             var fuelTanks = new List<FuelTank>();
             
-            foreach (Node child in part.RigidBody.GetChildren())
+            part.TryUseRigidBody(rigidBody =>
             {
-                if (child is Engine engine && !engine.IsQueuedForDeletion())
+                foreach (Node child in rigidBody.GetChildren())
                 {
-                    engines.Add(engine);
+                    if (child is Engine engine && !engine.IsQueuedForDeletion())
+                    {
+                        engines.Add(engine);
+                    }
+                    else if (child is FuelTank fuelTank && !fuelTank.IsQueuedForDeletion())
+                    {
+                        fuelTanks.Add(fuelTank);
+                    }
                 }
-                else if (child is FuelTank fuelTank && !fuelTank.IsQueuedForDeletion())
-                {
-                    fuelTanks.Add(fuelTank);
-                }
-            }
+            });
             
             _partEngines[part.Id] = engines;
             _partFuelTanks[part.Id] = fuelTanks;
@@ -1046,21 +1082,10 @@ namespace Lithobrake.Core
             // Clean up anti-wobble system
             _antiWobbleSystem?.Reset();
             
-            // Clean up joints
-            foreach (var joint in _joints)
-            {
-                if (joint.Joint != null && GodotObject.IsInstanceValid(joint.Joint))
-                {
-                    joint.Joint.QueueFree();
-                }
-            }
+            // Dispose all parts and joints properly
+            Dispose();
             
-            // Clean up parts (but don't destroy the RigidBodies, they may be reused)
-            _parts.Clear();
-            _joints.Clear();
-            _partLookup.Clear();
-            
-            GD.Print($"PhysicsVessel {_vesselId}: Cleaned up");
+            DebugLog.Log($"PhysicsVessel {_vesselId}: Cleaned up");
         }
         
         /// <summary>
@@ -1274,13 +1299,16 @@ namespace Lithobrake.Core
                 // Update all part positions
                 foreach (var part in _parts)
                 {
-                    if (!part.IsActive || part.RigidBody == null || !GodotObject.IsInstanceValid(part.RigidBody))
+                    if (!part.IsActive || !part.IsUsable)
                         continue;
                     
                     // Update part positions by the delta amount
-                    var currentPos = Double3.FromVector3(part.RigidBody.GlobalPosition);
-                    var newPos = currentPos + deltaPosition;
-                    part.RigidBody.GlobalPosition = newPos.ToVector3();
+                    part.TryUseRigidBody(rigidBody =>
+                    {
+                        var currentPos = Double3.FromVector3(rigidBody.GlobalPosition);
+                        var newPos = currentPos + deltaPosition;
+                        rigidBody.GlobalPosition = newPos.ToVector3();
+                    });
                     
                     // Update local position as well
                     part.LocalPosition += deltaPosition;
@@ -1344,23 +1372,17 @@ namespace Lithobrake.Core
         {
             if (!_disposed && disposing)
             {
-                // Clean up parts and their RigidBody3D resources
+                // Clean up parts using proper disposal
                 foreach (var part in _parts)
                 {
-                    if (part.RigidBody != null && GodotObject.IsInstanceValid(part.RigidBody))
-                    {
-                        part.RigidBody.QueueFree();
-                    }
+                    SafeOperations.SafeDispose(part, $"VesselPart[{part.Id}]");
                 }
                 _parts.Clear();
                 
-                // Clean up joints and their Joint3D resources
+                // Clean up joints using proper disposal
                 foreach (var joint in _joints)
                 {
-                    if (joint.Joint != null && GodotObject.IsInstanceValid(joint.Joint))
-                    {
-                        joint.Joint.QueueFree();
-                    }
+                    SafeOperations.SafeDispose(joint, $"VesselJoint[{joint.Id}]");
                 }
                 _joints.Clear();
                 
@@ -1389,56 +1411,101 @@ namespace Lithobrake.Core
     }
     
     /// <summary>
-    /// Individual vessel part data
+    /// Individual vessel part data with proper lifecycle management
     /// </summary>
-    public class VesselPart
+    public class VesselPart : IDisposable
     {
         public int Id;
         
-        private RigidBody3D? _rigidBody;
-        public RigidBody3D RigidBody 
-        { 
-            get => _rigidBody ?? throw new InvalidOperationException($"VesselPart {Id}: RigidBody not initialized. Call SetRigidBody() first.");
-            private set => _rigidBody = value;
-        }
+        private ManagedGodotObject<RigidBody3D>? _managedRigidBody;
+        private bool _disposed = false;
+        
+        public RigidBody3D? RigidBody => _managedRigidBody?.Object;
         
         public Part? PartReference; // Reference to the actual Part for atmospheric calculations
         public double Mass;
         public Double3 LocalPosition;
         public bool IsActive;
         
+        // State tracking to eliminate repeated validation
+        public bool IsDisposed => _disposed;
+        public bool IsUsable => !_disposed && _managedRigidBody?.IsUsable == true;
+        
         /// <summary>
-        /// Safely sets the rigid body with validation
+        /// Safely sets the rigid body with lifecycle management
         /// </summary>
         public void SetRigidBody(RigidBody3D rigidBody)
         {
             if (rigidBody == null)
                 throw new ArgumentNullException(nameof(rigidBody));
-            if (!GodotObject.IsInstanceValid(rigidBody))
-                throw new ArgumentException("RigidBody instance is not valid", nameof(rigidBody));
                 
-            _rigidBody = rigidBody;
+            // Dispose existing managed object if any
+            _managedRigidBody?.Dispose();
+            
+            // Create new managed wrapper
+            _managedRigidBody = SafeOperations.CreateManaged(rigidBody, $"VesselPart[{Id}].RigidBody");
+            if (_managedRigidBody == null)
+                throw new ArgumentException("Failed to create managed RigidBody - object is invalid", nameof(rigidBody));
         }
         
         /// <summary>
-        /// Checks if the RigidBody is valid and can be safely used
+        /// Safely executes an action on the RigidBody if it's usable
         /// </summary>
-        public bool IsRigidBodyValid => SafeOperations.IsValid(_rigidBody, $"VesselPart[{Id}].RigidBody");
+        public bool TryUseRigidBody(Action<RigidBody3D> action)
+        {
+            return SafeOperations.TryUseManaged(_managedRigidBody, action, $"VesselPart[{Id}]");
+        }
+        
+        /// <summary>
+        /// Safely executes a function on the RigidBody if it's usable
+        /// </summary>
+        public TResult? TryUseRigidBody<TResult>(Func<RigidBody3D, TResult> func) where TResult : class
+        {
+            return _managedRigidBody?.TryExecute(func);
+        }
+        
+        /// <summary>
+        /// Safely executes a function on the RigidBody with a default value (reference types)
+        /// </summary>
+        public TResult TryUseRigidBodyWithDefault<TResult>(Func<RigidBody3D, TResult> func, TResult defaultValue) where TResult : class
+        {
+            return SafeOperations.TryUseManagedWithDefault(_managedRigidBody, func, defaultValue, $"VesselPart[{Id}]");
+        }
+
+        /// <summary>
+        /// Safely executes a function on the RigidBody with a default value (value types)
+        /// </summary>
+        public TResult TryUseRigidBodyWithDefaultValue<TResult>(Func<RigidBody3D, TResult> func, TResult defaultValue) where TResult : struct
+        {
+            return SafeOperations.TryUseManagedWithDefaultValue(_managedRigidBody, func, defaultValue, $"VesselPart[{Id}]");
+        }
+        
+        public void Dispose()
+        {
+            if (_disposed)
+                return;
+                
+            _disposed = true;
+            IsActive = false;
+            
+            _managedRigidBody?.Dispose();
+            _managedRigidBody = null;
+            
+            DebugLog.LogResource($"VesselPart[{Id}] disposed");
+        }
     }
     
     /// <summary>
-    /// Joint between vessel parts
+    /// Joint between vessel parts with proper lifecycle management
     /// </summary>
-    public class VesselJoint
+    public class VesselJoint : IDisposable
     {
         public int Id;
         
-        private Joint3D? _joint;
-        public Joint3D Joint 
-        { 
-            get => _joint ?? throw new InvalidOperationException($"VesselJoint {Id}: Joint not initialized. Call SetJoint() first.");
-            private set => _joint = value;
-        }
+        private ManagedGodotObject<Joint3D>? _managedJoint;
+        private bool _disposed = false;
+        
+        public Joint3D? Joint => _managedJoint?.Object;
         
         public int PartA;
         public int PartB;
@@ -1447,23 +1514,72 @@ namespace Lithobrake.Core
         public bool IsActive;
         public double CurrentStress = 0.0; // Current force/torque applied to joint
         
+        // State tracking to eliminate repeated validation
+        public bool IsDisposed => _disposed;
+        public bool IsUsable => !_disposed && _managedJoint?.IsUsable == true;
+        
         /// <summary>
-        /// Safely sets the joint with validation
+        /// Safely sets the joint with lifecycle management
         /// </summary>
         public void SetJoint(Joint3D joint)
         {
             if (joint == null)
                 throw new ArgumentNullException(nameof(joint));
-            if (!GodotObject.IsInstanceValid(joint))
-                throw new ArgumentException("Joint instance is not valid", nameof(joint));
                 
-            _joint = joint;
+            // Dispose existing managed object if any
+            _managedJoint?.Dispose();
+            
+            // Create new managed wrapper
+            _managedJoint = SafeOperations.CreateManaged(joint, $"VesselJoint[{Id}].Joint");
+            if (_managedJoint == null)
+                throw new ArgumentException("Failed to create managed Joint - object is invalid", nameof(joint));
         }
         
         /// <summary>
-        /// Checks if the Joint is valid and can be safely used
+        /// Safely executes an action on the Joint if it's usable
         /// </summary>
-        public bool IsJointValid => SafeOperations.IsValid(_joint, $"VesselJoint[{Id}].Joint");
+        public bool TryUseJoint(Action<Joint3D> action)
+        {
+            return SafeOperations.TryUseManaged(_managedJoint, action, $"VesselJoint[{Id}]");
+        }
+        
+        /// <summary>
+        /// Safely executes a function on the Joint if it's usable
+        /// </summary>
+        public TResult? TryUseJoint<TResult>(Func<Joint3D, TResult> func) where TResult : class
+        {
+            return _managedJoint?.TryExecute(func);
+        }
+        
+        /// <summary>
+        /// Safely executes a function on the Joint with a default value (reference types)
+        /// </summary>
+        public TResult TryUseJointWithDefault<TResult>(Func<Joint3D, TResult> func, TResult defaultValue) where TResult : class
+        {
+            return SafeOperations.TryUseManagedWithDefault(_managedJoint, func, defaultValue, $"VesselJoint[{Id}]");
+        }
+
+        /// <summary>
+        /// Safely executes a function on the Joint with a default value (value types)
+        /// </summary>
+        public TResult TryUseJointWithDefaultValue<TResult>(Func<Joint3D, TResult> func, TResult defaultValue) where TResult : struct
+        {
+            return SafeOperations.TryUseManagedWithDefaultValue(_managedJoint, func, defaultValue, $"VesselJoint[{Id}]");
+        }
+        
+        public void Dispose()
+        {
+            if (_disposed)
+                return;
+                
+            _disposed = true;
+            IsActive = false;
+            
+            _managedJoint?.Dispose();
+            _managedJoint = null;
+            
+            DebugLog.LogResource($"VesselJoint[{Id}] disposed");
+        }
     }
     
     /// <summary>

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
+using System.Linq;
 using Godot;
 
 namespace Lithobrake.Core
@@ -169,6 +170,145 @@ namespace Lithobrake.Core
             // For example, checking if node is in the scene tree
             
             return true;
+        }
+
+        /// <summary>
+        /// Creates a managed Godot object with automatic lifecycle tracking.
+        /// Eliminates the need for manual IsInstanceValid() checks.
+        /// </summary>
+        /// <typeparam name="T">Type of Godot object</typeparam>
+        /// <param name="obj">The object to wrap</param>
+        /// <param name="name">Optional name for debugging</param>
+        /// <returns>Managed wrapper or null if obj is invalid</returns>
+        public static ManagedGodotObject<T>? CreateManaged<T>(T? obj, string name = "") where T : GodotObject
+        {
+            if (!IsValid(obj, name))
+                return null;
+                
+            return ObjectLifecycleManager.CreateManagedObject(obj!, name);
+        }
+
+        /// <summary>
+        /// Safely accesses a managed object and executes an action if the object is usable.
+        /// </summary>
+        /// <typeparam name="T">Type of Godot object</typeparam>
+        /// <param name="managedObj">The managed object wrapper</param>
+        /// <param name="action">Action to execute</param>
+        /// <param name="context">Context for error reporting</param>
+        /// <returns>True if action was executed successfully</returns>
+        public static bool TryUseManaged<T>(ManagedGodotObject<T>? managedObj, Action<T> action, string context = "") where T : GodotObject
+        {
+            if (managedObj == null || !managedObj.IsUsable)
+                return false;
+                
+            return managedObj.TryExecute(action);
+        }
+
+        /// <summary>
+        /// Safely accesses a managed object and executes a function if the object is usable.
+        /// </summary>
+        /// <typeparam name="T">Type of Godot object</typeparam>
+        /// <typeparam name="TResult">Return type</typeparam>
+        /// <param name="managedObj">The managed object wrapper</param>
+        /// <param name="func">Function to execute</param>
+        /// <param name="defaultValue">Value to return if object not usable</param>
+        /// <param name="context">Context for error reporting</param>
+        /// <returns>Function result or default value</returns>
+        public static TResult TryUseManagedWithDefault<T, TResult>(ManagedGodotObject<T>? managedObj, Func<T, TResult> func, TResult defaultValue, string context = "") where T : GodotObject where TResult : class
+        {
+            if (managedObj == null || !managedObj.IsUsable)
+                return defaultValue;
+                
+            var result = managedObj.TryExecute(func);
+            return result ?? defaultValue;
+        }
+
+        /// <summary>
+        /// Safely accesses a managed object and executes a function if the object is usable (for value types).
+        /// </summary>
+        /// <typeparam name="T">Type of Godot object</typeparam>
+        /// <typeparam name="TResult">Return type (value type)</typeparam>
+        /// <param name="managedObj">The managed object wrapper</param>
+        /// <param name="func">Function to execute</param>
+        /// <param name="defaultValue">Value to return if object not usable</param>
+        /// <param name="context">Context for error reporting</param>
+        /// <returns>Function result or default value</returns>
+        public static TResult TryUseManagedWithDefaultValue<T, TResult>(ManagedGodotObject<T>? managedObj, Func<T, TResult> func, TResult defaultValue, string context = "") where T : GodotObject where TResult : struct
+        {
+            if (managedObj == null || !managedObj.IsUsable)
+                return defaultValue;
+                
+            TResult result = defaultValue;
+            managedObj.TryExecute(obj => result = func(obj));
+            return result;
+        }
+
+        /// <summary>
+        /// Performs a safe disposal operation with proper lifecycle tracking.
+        /// </summary>
+        /// <param name="disposable">Object to dispose</param>
+        /// <param name="context">Context for error reporting</param>
+        /// <returns>True if disposal succeeded</returns>
+        public static bool SafeDispose(IDisposable? disposable, string context = "")
+        {
+            if (disposable == null)
+                return true;
+                
+            return TryExecute(() => disposable.Dispose(), $"SafeDispose[{context}]");
+        }
+
+        /// <summary>
+        /// Safely queues a Godot object for deletion with lifecycle tracking.
+        /// </summary>
+        /// <param name="obj">Object to queue for deletion</param>
+        /// <param name="context">Context for error reporting</param>
+        /// <returns>True if queuing succeeded</returns>
+        public static bool SafeQueueFree(GodotObject? obj, string context = "")
+        {
+            if (obj == null)
+                return true;
+                
+            if (!IsValid(obj, context))
+                return false;
+                
+            return TryExecute(() => 
+            {
+                if (obj is Node node)
+                    node.QueueFree();
+            }, $"SafeQueueFree[{context}]");
+        }
+
+        /// <summary>
+        /// Validates that a collection of Godot objects are all valid.
+        /// </summary>
+        /// <typeparam name="T">Type of Godot object</typeparam>
+        /// <param name="objects">Collection to validate</param>
+        /// <param name="context">Context for error reporting</param>
+        /// <returns>True if all objects are valid</returns>
+        public static bool AreAllValid<T>(IEnumerable<T?> objects, string context = "") where T : GodotObject
+        {
+            foreach (var obj in objects)
+            {
+                if (!IsValid(obj, context))
+                    return false;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// Filters a collection to only include valid Godot objects.
+        /// </summary>
+        /// <typeparam name="T">Type of Godot object</typeparam>
+        /// <param name="objects">Collection to filter</param>
+        /// <param name="context">Context for error reporting</param>
+        /// <returns>Filtered collection with only valid objects</returns>
+        public static IEnumerable<T> FilterValid<T>(IEnumerable<T?> objects, string context = "") where T : GodotObject
+        {
+            foreach (var obj in objects)
+            {
+                if (IsValid(obj, context))
+                    yield return obj!;
+            }
         }
 
         private static void LogError(string message, Exception ex, string context)
