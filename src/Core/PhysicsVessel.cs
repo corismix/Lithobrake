@@ -123,11 +123,11 @@ namespace Lithobrake.Core
             var part = new VesselPart
             {
                 Id = _parts.Count,
-                RigidBody = rigidBody,
                 Mass = mass,
                 LocalPosition = localPosition,
                 IsActive = true
             };
+            part.SetRigidBody(rigidBody);
             
             _parts.Add(part);
             _partLookup[part.Id] = part;
@@ -219,13 +219,13 @@ namespace Lithobrake.Core
             var vesselJoint = new VesselJoint
             {
                 Id = _joints.Count,
-                Joint = joint,
                 PartA = partA,
                 PartB = partB,
                 JointType = jointType,
                 Tuning = tuning,
                 IsActive = true
             };
+            vesselJoint.SetJoint(joint);
             
             _joints.Add(vesselJoint);
             
@@ -1266,11 +1266,36 @@ namespace Lithobrake.Core
     public class VesselPart
     {
         public int Id;
-        public RigidBody3D RigidBody = null!;
-        public Part? PartReference = null!; // Reference to the actual Part for atmospheric calculations
+        
+        private RigidBody3D? _rigidBody;
+        public RigidBody3D RigidBody 
+        { 
+            get => _rigidBody ?? throw new InvalidOperationException($"VesselPart {Id}: RigidBody not initialized. Call SetRigidBody() first.");
+            private set => _rigidBody = value;
+        }
+        
+        public Part? PartReference; // Reference to the actual Part for atmospheric calculations
         public double Mass;
         public Double3 LocalPosition;
         public bool IsActive;
+        
+        /// <summary>
+        /// Safely sets the rigid body with validation
+        /// </summary>
+        public void SetRigidBody(RigidBody3D rigidBody)
+        {
+            if (rigidBody == null)
+                throw new ArgumentNullException(nameof(rigidBody));
+            if (!GodotObject.IsInstanceValid(rigidBody))
+                throw new ArgumentException("RigidBody instance is not valid", nameof(rigidBody));
+                
+            _rigidBody = rigidBody;
+        }
+        
+        /// <summary>
+        /// Checks if the RigidBody is valid and can be safely used
+        /// </summary>
+        public bool IsRigidBodyValid => SafeOperations.IsValid(_rigidBody, $"VesselPart[{Id}].RigidBody");
     }
     
     /// <summary>
@@ -1279,13 +1304,38 @@ namespace Lithobrake.Core
     public class VesselJoint
     {
         public int Id;
-        public Joint3D Joint = null!;
+        
+        private Joint3D? _joint;
+        public Joint3D Joint 
+        { 
+            get => _joint ?? throw new InvalidOperationException($"VesselJoint {Id}: Joint not initialized. Call SetJoint() first.");
+            private set => _joint = value;
+        }
+        
         public int PartA;
         public int PartB;
         public JointType JointType;
         public JointTuning Tuning;
         public bool IsActive;
         public double CurrentStress = 0.0; // Current force/torque applied to joint
+        
+        /// <summary>
+        /// Safely sets the joint with validation
+        /// </summary>
+        public void SetJoint(Joint3D joint)
+        {
+            if (joint == null)
+                throw new ArgumentNullException(nameof(joint));
+            if (!GodotObject.IsInstanceValid(joint))
+                throw new ArgumentException("Joint instance is not valid", nameof(joint));
+                
+            _joint = joint;
+        }
+        
+        /// <summary>
+        /// Checks if the Joint is valid and can be safely used
+        /// </summary>
+        public bool IsJointValid => SafeOperations.IsValid(_joint, $"VesselJoint[{Id}].Joint");
     }
     
     /// <summary>

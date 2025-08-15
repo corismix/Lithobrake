@@ -217,11 +217,8 @@ namespace Lithobrake.Core
             AddChild(particles);
             AddChild(light);
             
-            return new ExhaustEffect
+            return new ExhaustEffect(particles, light, engine)
             {
-                ParticleSystem = particles,
-                ExhaustLight = light,
-                Engine = engine,
                 IsActive = false
             };
         }
@@ -241,10 +238,8 @@ namespace Lithobrake.Core
             
             AddChild(arrow);
             
-            return new ThrustVisualization
+            return new ThrustVisualization(arrow, engine)
             {
-                ThrustArrow = arrow,
-                Engine = engine,
                 IsVisible = false
             };
         }
@@ -603,10 +598,45 @@ namespace Lithobrake.Core
     /// </summary>
     public class ExhaustEffect
     {
-        public GpuParticles3D ParticleSystem { get; set; } = null!;
-        public SpotLight3D ExhaustLight { get; set; } = null!;
-        public Engine Engine { get; set; } = null!;
+        private GpuParticles3D? _particleSystem;
+        public GpuParticles3D ParticleSystem 
+        { 
+            get => _particleSystem ?? throw new InvalidOperationException("ParticleSystem not initialized in ExhaustEffect");
+            set => _particleSystem = value ?? throw new ArgumentNullException(nameof(value));
+        }
+        
+        private SpotLight3D? _exhaustLight;
+        public SpotLight3D ExhaustLight 
+        { 
+            get => _exhaustLight ?? throw new InvalidOperationException("ExhaustLight not initialized in ExhaustEffect");
+            set => _exhaustLight = value ?? throw new ArgumentNullException(nameof(value));
+        }
+        
+        private Engine? _engine;
+        public Engine Engine 
+        { 
+            get => _engine ?? throw new InvalidOperationException("Engine not initialized in ExhaustEffect");
+            set => _engine = value ?? throw new ArgumentNullException(nameof(value));
+        }
+        
         public bool IsActive { get; set; } = false;
+        
+        /// <summary>
+        /// Constructor requiring all components to be set
+        /// </summary>
+        public ExhaustEffect(GpuParticles3D particleSystem, SpotLight3D exhaustLight, Engine engine)
+        {
+            ParticleSystem = particleSystem;
+            ExhaustLight = exhaustLight;
+            Engine = engine;
+        }
+        
+        /// <summary>
+        /// Checks if all components are valid
+        /// </summary>
+        public bool AreComponentsValid => SafeOperations.IsValid(_particleSystem, "ParticleSystem") &&
+                                         SafeOperations.IsValid(_exhaustLight, "ExhaustLight") &&
+                                         SafeOperations.IsValid(_engine, "Engine");
     }
     
     /// <summary>
@@ -614,9 +644,36 @@ namespace Lithobrake.Core
     /// </summary>
     public class ThrustVisualization
     {
-        public MeshInstance3D ThrustArrow { get; set; } = null!;
-        public Engine Engine { get; set; } = null!;
+        private MeshInstance3D? _thrustArrow;
+        public MeshInstance3D ThrustArrow 
+        { 
+            get => _thrustArrow ?? throw new InvalidOperationException("ThrustArrow not initialized in ThrustVisualization");
+            set => _thrustArrow = value ?? throw new ArgumentNullException(nameof(value));
+        }
+        
+        private Engine? _engine;
+        public Engine Engine 
+        { 
+            get => _engine ?? throw new InvalidOperationException("Engine not initialized in ThrustVisualization");
+            set => _engine = value ?? throw new ArgumentNullException(nameof(value));
+        }
+        
         public bool IsVisible { get; set; } = false;
+        
+        /// <summary>
+        /// Constructor requiring all components to be set
+        /// </summary>
+        public ThrustVisualization(MeshInstance3D thrustArrow, Engine engine)
+        {
+            ThrustArrow = thrustArrow;
+            Engine = engine;
+        }
+        
+        /// <summary>
+        /// Checks if all components are valid
+        /// </summary>
+        public bool AreComponentsValid => SafeOperations.IsValid(_thrustArrow, "ThrustArrow") &&
+                                         SafeOperations.IsValid(_engine, "Engine");
     }
     
     /// <summary>

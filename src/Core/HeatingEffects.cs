@@ -222,10 +222,10 @@ namespace Lithobrake.Core
         /// </summary>
         /// <param name="part">Part to create effect for</param>
         /// <returns>Heating effect data</returns>
-        private static HeatingEffect CreatePartHeatingEffect(Part part)
+        private static HeatingEffect? CreatePartHeatingEffect(Part part)
         {
             if (Instance == null)
-                return new HeatingEffect();
+                return null;
             
             var particles = Instance._heatingParticlePool.Get();
             var glow = Instance._heatingGlowPool.Get();
@@ -242,11 +242,8 @@ namespace Lithobrake.Core
             Instance.AddChild(particles);
             Instance.AddChild(glow);
             
-            return new HeatingEffect
+            return new HeatingEffect(particles, glow, part)
             {
-                ParticleSystem = particles,
-                GlowLight = glow,
-                Part = part,
                 IsActive = false,
                 CurrentIntensity = 0.0
             };
@@ -509,11 +506,46 @@ namespace Lithobrake.Core
     /// </summary>
     public class HeatingEffect
     {
-        public GpuParticles3D ParticleSystem { get; set; } = null!;
-        public SpotLight3D GlowLight { get; set; } = null!;
-        public Part Part { get; set; } = null!;
+        private GpuParticles3D? _particleSystem;
+        public GpuParticles3D ParticleSystem 
+        { 
+            get => _particleSystem ?? throw new InvalidOperationException("ParticleSystem not initialized in HeatingEffect");
+            set => _particleSystem = value ?? throw new ArgumentNullException(nameof(value));
+        }
+        
+        private SpotLight3D? _glowLight;
+        public SpotLight3D GlowLight 
+        { 
+            get => _glowLight ?? throw new InvalidOperationException("GlowLight not initialized in HeatingEffect");
+            set => _glowLight = value ?? throw new ArgumentNullException(nameof(value));
+        }
+        
+        private Part? _part;
+        public Part Part 
+        { 
+            get => _part ?? throw new InvalidOperationException("Part not initialized in HeatingEffect");
+            set => _part = value ?? throw new ArgumentNullException(nameof(value));
+        }
+        
         public bool IsActive { get; set; } = false;
         public double CurrentIntensity { get; set; } = 0.0;
+        
+        /// <summary>
+        /// Constructor requiring all components to be set
+        /// </summary>
+        public HeatingEffect(GpuParticles3D particleSystem, SpotLight3D glowLight, Part part)
+        {
+            ParticleSystem = particleSystem;
+            GlowLight = glowLight;
+            Part = part;
+        }
+        
+        /// <summary>
+        /// Checks if all components are valid
+        /// </summary>
+        public bool AreComponentsValid => SafeOperations.IsValid(_particleSystem, "ParticleSystem") &&
+                                         SafeOperations.IsValid(_glowLight, "GlowLight") &&
+                                         SafeOperations.IsValid(_part, "Part");
     }
     
     /// <summary>

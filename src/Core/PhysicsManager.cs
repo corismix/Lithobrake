@@ -221,7 +221,7 @@ namespace Lithobrake.Core
             if (_testBody != null && GodotObject.IsInstanceValid(_testBody))
             {
                 _testBody.QueueFree();
-                _testBody = null!;
+                _testBody = null;
                 GD.Print("PhysicsManager: Destroyed test rigid body");
             }
         }

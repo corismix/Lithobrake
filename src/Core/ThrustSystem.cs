@@ -52,9 +52,8 @@ namespace Lithobrake.Core
                     result.ActiveEngines++;
                     
                     // Track individual engine thrust for force application
-                    result.EngineThrustData.Add(new EngineThrustData
+                    result.EngineThrustData.Add(new EngineThrustData(engine)
                     {
-                        Engine = engine,
                         Thrust = engineThrust.Magnitude,
                         ThrustVector = engineThrust.ThrustVector,
                         MountPosition = engine.GlobalPosition
@@ -245,10 +244,29 @@ namespace Lithobrake.Core
     /// </summary>
     public class EngineThrustData
     {
-        public Engine Engine { get; set; } = null!;
+        private Engine? _engine;
+        public Engine Engine 
+        { 
+            get => _engine ?? throw new InvalidOperationException("Engine not initialized in EngineThrustData");
+            set => _engine = value ?? throw new ArgumentNullException(nameof(value));
+        }
+        
         public double Thrust { get; set; }
         public Vector3 ThrustVector { get; set; }
         public Vector3 MountPosition { get; set; }
+        
+        /// <summary>
+        /// Constructor requiring engine to be set
+        /// </summary>
+        public EngineThrustData(Engine engine)
+        {
+            Engine = engine; // Uses the setter with validation
+        }
+        
+        /// <summary>
+        /// Checks if the engine is valid and can be safely used
+        /// </summary>
+        public bool IsEngineValid => SafeOperations.IsValid(_engine, "EngineThrustData.Engine");
     }
     
     /// <summary>

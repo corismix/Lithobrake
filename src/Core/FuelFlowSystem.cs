@@ -53,9 +53,8 @@ namespace Lithobrake.Core
                 // Handle fuel starvation
                 if (!engineResult.HasAdequateFuel && engine.IsActive)
                 {
-                    result.StarvationEvents.Add(new FuelStarvationEvent
+                    result.StarvationEvents.Add(new FuelStarvationEvent(engine)
                     {
-                        Engine = engine,
                         RequestedFuel = engineResult.FuelRequested,
                         AvailableFuel = engineResult.FuelConsumed,
                         StarvationTime = Time.GetUnixTimeFromSystem()
@@ -91,9 +90,8 @@ namespace Lithobrake.Core
         /// <returns>Engine fuel consumption result</returns>
         private static EngineFuelResult ProcessEngineConsumption(Engine engine, List<FuelTank> availableTanks, double deltaTime)
         {
-            var result = new EngineFuelResult
+            var result = new EngineFuelResult(engine)
             {
-                Engine = engine,
                 FuelRequested = engine.FuelConsumption * (engine.CurrentThrust / engine.MaxThrust) * deltaTime
             };
             
@@ -330,11 +328,30 @@ namespace Lithobrake.Core
     /// </summary>
     public class EngineFuelResult
     {
-        public Engine Engine { get; set; } = null!;
+        private Engine? _engine;
+        public Engine Engine 
+        { 
+            get => _engine ?? throw new InvalidOperationException("Engine not initialized in EngineFuelResult");
+            set => _engine = value ?? throw new ArgumentNullException(nameof(value));
+        }
+        
         public double FuelRequested { get; set; } = 0.0;
         public double FuelConsumed { get; set; } = 0.0;
         public bool HasAdequateFuel { get; set; } = false;
         public List<FuelTank> TanksUsed { get; set; } = new();
+        
+        /// <summary>
+        /// Constructor requiring engine to be set
+        /// </summary>
+        public EngineFuelResult(Engine engine)
+        {
+            Engine = engine; // Uses the setter with validation
+        }
+        
+        /// <summary>
+        /// Checks if the engine is valid and can be safely used
+        /// </summary>
+        public bool IsEngineValid => SafeOperations.IsValid(_engine, "EngineFuelResult.Engine");
     }
     
     /// <summary>
@@ -342,10 +359,29 @@ namespace Lithobrake.Core
     /// </summary>
     public class FuelStarvationEvent
     {
-        public Engine Engine { get; set; } = null!;
+        private Engine? _engine;
+        public Engine Engine 
+        { 
+            get => _engine ?? throw new InvalidOperationException("Engine not initialized in FuelStarvationEvent");
+            set => _engine = value ?? throw new ArgumentNullException(nameof(value));
+        }
+        
         public double RequestedFuel { get; set; }
         public double AvailableFuel { get; set; }
         public double StarvationTime { get; set; }
+        
+        /// <summary>
+        /// Constructor requiring engine to be set
+        /// </summary>
+        public FuelStarvationEvent(Engine engine)
+        {
+            Engine = engine; // Uses the setter with validation
+        }
+        
+        /// <summary>
+        /// Checks if the engine is valid and can be safely used
+        /// </summary>
+        public bool IsEngineValid => SafeOperations.IsValid(_engine, "FuelStarvationEvent.Engine");
     }
     
     /// <summary>

@@ -8,7 +8,7 @@
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <WarningsAsErrors />
     <WarningsNotAsErrors />
-    <LangVersion>12</LangVersion>
+    <LangVersion>11</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   
@@ -23,6 +23,15 @@
     <DebugType>none</DebugType>
     <Optimize>true</Optimize>
     <DefineConstants>TRACE</DefineConstants>
+  </PropertyGroup>
+  
+  <!-- M4-specific optimizations for Apple Silicon -->
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' == 'osx-arm64'">
+    <EnablePreviewFeatures>false</EnablePreviewFeatures>
+    <DebugType Condition="'$(Configuration)' == 'Release'">none</DebugType>
+    <Optimize>true</Optimize>
+    <PlatformTarget>ARM64</PlatformTarget>
+    <DefineConstants Condition="'$(Configuration)' == 'Release'">TRACE;APPLE_SILICON_M4</DefineConstants>
   </PropertyGroup>
   
 </Project>

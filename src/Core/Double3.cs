@@ -1,12 +1,16 @@
 using Godot;
 using System;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace Lithobrake.Core
 {
     /// <summary>
     /// Double precision 3D vector struct for high-precision orbital mechanics calculations.
     /// Provides conversion utilities to/from Godot.Vector3 for rendering operations.
+    /// Optimized for Apple Silicon M4 with explicit memory layout for cache performance.
     /// </summary>
+    [StructLayout(LayoutKind.Sequential, Pack = 8, Size = 24)]
     public struct Double3 : IEquatable<Double3>
     {
         public double X { get; set; }
@@ -30,8 +34,11 @@ namespace Lithobrake.Core
         public double LengthSquared => X * X + Y * Y + Z * Z;
         public Double3 Normalized => this / Length;
 
-        // Conversion utilities for Godot interop
+        // Conversion utilities for Godot interop - aggressively inlined for hot paths
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public Vector3 ToVector3() => new Vector3((float)X, (float)Y, (float)Z);
+        
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Double3 FromVector3(Vector3 v) => new Double3(v.X, v.Y, v.Z);
 
         // Performance-critical batch conversion methods
@@ -66,10 +73,25 @@ namespace Lithobrake.Core
         }
         
         /// <summary>
-        /// In-place conversion avoiding temporary allocations
+        /// In-place conversion avoiding temporary allocations with comprehensive bounds checking
         /// </summary>
         public static unsafe void UnsafeConvertToVector3Array(Double3[] source, Vector3[] destination, int count)
         {
+            // Comprehensive parameter validation to prevent memory corruption
+            if (source == null) 
+                throw new ArgumentNullException(nameof(source), "Source array cannot be null");
+            if (destination == null) 
+                throw new ArgumentNullException(nameof(destination), "Destination array cannot be null");
+            if (count < 0) 
+                throw new ArgumentOutOfRangeException(nameof(count), count, "Count must be non-negative");
+            if (count > source.Length) 
+                throw new ArgumentOutOfRangeException(nameof(count), count, 
+                    $"Count {count} exceeds source array length {source.Length}");
+            if (count > destination.Length) 
+                throw new ArgumentOutOfRangeException(nameof(count), count, 
+                    $"Count {count} exceeds destination array length {destination.Length}");
+
+            // Safe conversion with bounds checking
             for (int i = 0; i < count; i++)
             {
                 ref var src = ref source[i];
@@ -110,26 +132,46 @@ namespace Lithobrake.Core
             return stopwatch.Elapsed.TotalMilliseconds;
         }
 
-        // Arithmetic operators
+        // Arithmetic operators - aggressively inlined for physics calculations
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Double3 operator +(Double3 a, Double3 b) => new Double3(a.X + b.X, a.Y + b.Y, a.Z + b.Z);
+        
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Double3 operator -(Double3 a, Double3 b) => new Double3(a.X - b.X, a.Y - b.Y, a.Z - b.Z);
+        
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Double3 operator -(Double3 a) => new Double3(-a.X, -a.Y, -a.Z);
+        
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Double3 operator *(Double3 a, double s) => new Double3(a.X * s, a.Y * s, a.Z * s);
+        
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Double3 operator *(double s, Double3 a) => new Double3(a.X * s, a.Y * s, a.Z * s);
+        
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Double3 operator /(Double3 a, double s) => new Double3(a.X / s, a.Y / s, a.Z / s);
 
-        // Vector operations
+        // Vector operations - aggressively inlined for orbital calculations
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static double Dot(Double3 a, Double3 b) => a.X * b.X + a.Y * b.Y + a.Z * b.Z;
+        
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Double3 Cross(Double3 a, Double3 b) => new Double3(
             a.Y * b.Z - a.Z * b.Y,
             a.Z * b.X - a.X * b.Z,
             a.X * b.Y - a.Y * b.X
         );
 
-        // Orbital mechanics utilities
+        // Orbital mechanics utilities - aggressively inlined for trajectory calculations
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static double Distance(Double3 a, Double3 b) => (a - b).Length;
+        
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Double3 Lerp(Double3 a, Double3 b, double t) => a + (b - a) * t;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Double3 Project(Double3 vector, Double3 onNormal) => onNormal * (Dot(vector, onNormal) / onNormal.LengthSquared);
+        
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Double3 Reflect(Double3 vector, Double3 normal) => vector - 2 * Project(vector, normal);
         
         /// <summary>
