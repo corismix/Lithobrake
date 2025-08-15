@@ -30,7 +30,8 @@ namespace Lithobrake.Core
         // Origin shift aware systems registry
         private readonly List<WeakReference<IOriginShiftAware>> _registeredSystems = new();
         private readonly object _registryLock = new object();
-        private bool _registryNeedsCleanup = false;
+        private int _cleanupCounter = 0;
+        private const int CleanupInterval = 10; // Clean up every 10 notifications to balance performance
         
         // Performance tracking
         private double _lastShiftDuration = 0.0;
@@ -71,6 +72,11 @@ namespace Lithobrake.Core
         {
             if (_instance == this)
             {
+                // Clean up static events to prevent memory leaks
+                OnPreOriginShift = null;
+                OnOriginShift = null;
+                OnPostOriginShift = null;
+                
                 _instance = null;
             }
         }
@@ -171,7 +177,7 @@ namespace Lithobrake.Core
             lock (_instance._registryLock)
             {
                 system.IsRegistered = false;
-                _instance._registryNeedsCleanup = true; // Mark for cleanup on next shift
+                // Cleanup will happen periodically in NotifyRegisteredSystems
                 
                 GD.Print($"FloatingOriginManager: Unregistered {system.GetType().Name} from origin shift notifications");
             }
@@ -247,11 +253,12 @@ namespace Lithobrake.Core
         {
             lock (_registryLock)
             {
-                // Clean up dead references if needed
-                if (_registryNeedsCleanup)
+                // Periodically clean up dead references to prevent memory leaks
+                _cleanupCounter++;
+                if (_cleanupCounter >= CleanupInterval)
                 {
                     CleanupRegisteredSystems();
-                    _registryNeedsCleanup = false;
+                    _cleanupCounter = 0;
                 }
                 
                 // Get all valid systems and sort by priority

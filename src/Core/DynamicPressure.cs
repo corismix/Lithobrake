@@ -1,6 +1,7 @@
 using Godot;
 using System;
 using System.Collections.Generic;
+using System.Threading;
 
 namespace Lithobrake.Core
 {
@@ -43,9 +44,9 @@ namespace Lithobrake.Core
         
         public override void _Ready()
         {
-            if (_instance == null)
+            // Thread-safe singleton assignment
+            if (Interlocked.CompareExchange(ref _instance, this, null) == null)
             {
-                _instance = this;
                 GD.Print("DynamicPressure: Initialized with Q tracking and auto-struts integration");
             }
             else
@@ -308,6 +309,11 @@ namespace Lithobrake.Core
         {
             if (_instance == this)
             {
+                // Clean up static events to prevent memory leaks
+                MaxQEvent = null;
+                HighQWarning = null;
+                QThresholdCrossed = null;
+                
                 _instance = null;
             }
             

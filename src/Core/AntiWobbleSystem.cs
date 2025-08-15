@@ -123,9 +123,22 @@ namespace Lithobrake.Core
                 }
             }
             
-            // Clean up stiffness states for removed joints
-            var activeJointIds = vesselJoints.Select(j => j.Id).ToHashSet();
-            var stiffnessKeysToRemove = _jointStiffness.Keys.Where(id => !activeJointIds.Contains(id)).ToList();
+            // Clean up stiffness states for removed joints (avoid LINQ allocations)
+            var activeJointIds = new HashSet<int>();
+            foreach (var joint in vesselJoints)
+            {
+                activeJointIds.Add(joint.Id);
+            }
+            
+            var stiffnessKeysToRemove = new List<int>();
+            foreach (var id in _jointStiffness.Keys)
+            {
+                if (!activeJointIds.Contains(id))
+                {
+                    stiffnessKeysToRemove.Add(id);
+                }
+            }
+            
             foreach (var keyToRemove in stiffnessKeysToRemove)
             {
                 _jointStiffness.Remove(keyToRemove);
@@ -217,7 +230,13 @@ namespace Lithobrake.Core
         {
             if (_virtualStruts.Count == 0) return;
             
-            var strutsToRemove = _virtualStruts.Keys.ToList();
+            // Avoid ToList() allocation by copying keys to array
+            var strutsToRemove = new List<int>();
+            foreach (var strutId in _virtualStruts.Keys)
+            {
+                strutsToRemove.Add(strutId);
+            }
+            
             foreach (var strutId in strutsToRemove)
             {
                 _virtualStruts.Remove(strutId);
@@ -231,8 +250,11 @@ namespace Lithobrake.Core
         private void UpdateExistingVirtualStruts(float deltaTime)
         {
             // For each active virtual strut, ensure it's still valid and update its properties
-            foreach (var strut in _virtualStruts.Values.Where(s => s.IsActive))
+            // Use foreach without LINQ to avoid allocation pressure
+            foreach (var strut in _virtualStruts.Values)
             {
+                if (!strut.IsActive)
+                    continue;
                 // Virtual struts would apply additional constraint forces here
                 // For now, we just track their existence
             }
@@ -286,10 +308,23 @@ namespace Lithobrake.Core
             
             // However, we can validate that our state remains consistent
             var vesselJoints = GetVesselJoints(vessel);
-            var activeJointIds = vesselJoints.Select(j => j.Id).ToHashSet();
             
-            // Clean up any stale joint stiffness states
-            var staleStiffnessIds = _jointStiffness.Keys.Where(id => !activeJointIds.Contains(id)).ToList();
+            // Build active joint IDs set without LINQ to avoid allocations
+            var activeJointIds = new HashSet<int>();
+            foreach (var joint in vesselJoints)
+            {
+                activeJointIds.Add(joint.Id);
+            }
+            
+            // Clean up any stale joint stiffness states without LINQ
+            var staleStiffnessIds = new List<int>();
+            foreach (var id in _jointStiffness.Keys)
+            {
+                if (!activeJointIds.Contains(id))
+                {
+                    staleStiffnessIds.Add(id);
+                }
+            }
             foreach (var staleId in staleStiffnessIds)
             {
                 _jointStiffness.Remove(staleId);

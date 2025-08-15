@@ -88,8 +88,8 @@ namespace Lithobrake.Core.Orbital
             // Newton-Raphson iteration for hyperbolic case
             for (int i = 0; i < maxIterations; i++)
             {
-                double sinhH = Math.Sinh(H);
-                double coshH = Math.Cosh(H);
+                double sinhH = FastMath.FastSinh(H);
+                double coshH = FastMath.FastCosh(H);
                 
                 double f = eccentricity * sinhH - H - meanAnomaly;
                 double df = eccentricity * coshH - 1.0;
@@ -136,9 +136,11 @@ namespace Lithobrake.Core.Orbital
             {
                 // Hyperbolic orbit
                 double H = SolveHyperbolic(meanAnomalyAtTime, state.Eccentricity);
-                double r = state.SemiMajorAxis * (state.Eccentricity * Math.Cosh(H) - 1.0);
-                double cosNu = (state.Eccentricity - Math.Cosh(H)) / (state.Eccentricity * Math.Cosh(H) - 1.0);
-                double sinNu = Math.Sqrt(state.Eccentricity * state.Eccentricity - 1.0) * Math.Sinh(H) / (state.Eccentricity * Math.Cosh(H) - 1.0);
+                double coshH = FastMath.FastCosh(H);
+                double sinhH = FastMath.FastSinh(H);
+                double r = state.SemiMajorAxis * (state.Eccentricity * coshH - 1.0);
+                double cosNu = (state.Eccentricity - coshH) / (state.Eccentricity * coshH - 1.0);
+                double sinNu = Math.Sqrt(state.Eccentricity * state.Eccentricity - 1.0) * sinhH / (state.Eccentricity * coshH - 1.0);
                 
                 // Position in orbital plane
                 position = new Double3(r * cosNu, r * sinNu, 0);
@@ -174,9 +176,9 @@ namespace Lithobrake.Core.Orbital
             {
                 // Hyperbolic orbit  
                 double H = SolveHyperbolic(meanAnomalyAtTime, state.Eccentricity);
-                r = state.SemiMajorAxis * (state.Eccentricity * Math.Cosh(H) - 1.0);
-                trueAnomaly = 2.0 * Math.Atan2(Math.Sqrt(state.Eccentricity + 1.0) * Math.Sinh(H / 2.0),
-                                               Math.Sqrt(state.Eccentricity - 1.0) * Math.Cosh(H / 2.0));
+                r = state.SemiMajorAxis * (state.Eccentricity * FastMath.FastCosh(H) - 1.0);
+                trueAnomaly = 2.0 * Math.Atan2(Math.Sqrt(state.Eccentricity + 1.0) * FastMath.FastSinh(H / 2.0),
+                                               Math.Sqrt(state.Eccentricity - 1.0) * FastMath.FastCosh(H / 2.0));
             }
             
             // Calculate velocity magnitude using vis-viva equation

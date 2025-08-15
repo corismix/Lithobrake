@@ -380,7 +380,7 @@ namespace Lithobrake.Core
             var seaLevelPressure = 101325.0; // Pa
             var scaleHeight = 7500.0; // m
             
-            return seaLevelPressure * Math.Exp(-altitude / scaleHeight);
+            return seaLevelPressure * FastMath.FastAtmosphericExp(altitude);
         }
         
         /// <summary>

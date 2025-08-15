@@ -38,7 +38,15 @@ namespace Lithobrake.Core
             if (engines == null)
                 return result;
             
-            var activeEngines = engines.Where(e => e != null && !e.IsQueuedForDeletion()).ToList();
+            // Use foreach loop instead of LINQ to avoid allocation pressure in 60Hz loop
+            var activeEngines = new List<Engine>();
+            foreach (var engine in engines)
+            {
+                if (engine != null && !engine.IsQueuedForDeletion())
+                {
+                    activeEngines.Add(engine);
+                }
+            }
             _enginesProcessed = activeEngines.Count;
             
             foreach (var engine in activeEngines)
@@ -153,8 +161,11 @@ namespace Lithobrake.Core
             if (engines == null || deltaTime <= 0)
                 return totalConsumption;
             
-            foreach (var engine in engines.Where(e => e != null && !e.IsQueuedForDeletion()))
+            // Use foreach loop instead of LINQ to avoid allocation pressure
+            foreach (var engine in engines)
             {
+                if (engine == null || engine.IsQueuedForDeletion())
+                    continue;
                 if (engine.IsActive && engine.HasFuel && engine.CurrentThrust > 0)
                 {
                     // Formula: consumption = thrust / (Isp * g0)

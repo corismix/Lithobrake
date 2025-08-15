@@ -25,7 +25,7 @@ namespace Lithobrake.Core
             _performanceMonitor = GetNode<PerformanceMonitor>("../PerformanceMonitor");
             
             // Start validation after a short delay to ensure everything is loaded
-            GetTree().CreateTimer(1.0).Connect("timeout", new Callable(this, nameof(StartValidation)));
+            GetTree().CreateTimer(1.0f).Timeout += StartValidation;
         }
         
         private void StartValidation()

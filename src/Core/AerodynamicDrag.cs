@@ -13,9 +13,9 @@ namespace Lithobrake.Core
     /// </summary>
     public partial class AerodynamicDrag : Node
     {
-        // Singleton pattern for global access
-        private static AerodynamicDrag? _instance;
-        public static AerodynamicDrag Instance => _instance ?? throw new InvalidOperationException("AerodynamicDrag not initialized");
+        // Thread-safe singleton pattern for global access
+        private static readonly Lazy<AerodynamicDrag> _lazyInstance = new(() => new AerodynamicDrag());
+        public static AerodynamicDrag Instance => _lazyInstance.Value;
         
         // Drag coefficient presets by part shape category
         public static class DragCoefficients
@@ -44,16 +44,15 @@ namespace Lithobrake.Core
         
         public override void _Ready()
         {
-            if (_instance == null)
-            {
-                _instance = this;
-                GD.Print("AerodynamicDrag: Initialized with realistic drag coefficients and cross-sectional area calculation");
-            }
-            else
+            // Thread-safe singleton validation
+            if (_lazyInstance.IsValueCreated && _lazyInstance.Value != this)
             {
                 GD.PrintErr("AerodynamicDrag: Multiple instances detected!");
                 QueueFree();
+                return;
             }
+            
+            GD.Print("AerodynamicDrag: Initialized with realistic drag coefficients and cross-sectional area calculation");
         }
         
         /// <summary>
@@ -102,7 +101,7 @@ namespace Lithobrake.Core
         /// <param name="vessel">Vessel to apply drag forces to</param>
         public static void ApplyDragForces(PhysicsVessel vessel)
         {
-            if (vessel?.Parts == null || !vessel.Parts.Any())
+            if (vessel?.Parts == null || vessel.Parts.Count == 0)
                 return;
             
             var startTime = Time.GetTicksMsec();
@@ -293,11 +292,7 @@ namespace Lithobrake.Core
         /// </summary>
         public override void _ExitTree()
         {
-            if (_instance == this)
-            {
-                _instance = null;
-            }
-            
+            // Note: Lazy<T> instances cannot be reset, they are cleaned up by GC
             base._ExitTree();
         }
     }

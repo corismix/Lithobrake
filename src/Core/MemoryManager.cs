@@ -20,6 +20,7 @@ namespace Lithobrake.Core
         private static long _lastMemoryUsage = 0;
         private static int _lastGCCount = 0;
         private static List<GCMemoryInfo> _gcHistory = new List<GCMemoryInfo>();
+        private const int MAX_GC_HISTORY_SIZE = 100; // Limit GC history to prevent unbounded growth
         
         // Performance thresholds
         private const long MAX_ALLOCATION_PER_FRAME = 1024 * 1024; // 1MB per frame
@@ -238,6 +239,35 @@ namespace Lithobrake.Core
         }
         
         /// <summary>
+        /// Track GC memory info with size limits to prevent unbounded growth
+        /// </summary>
+        private static void TrackGCHistory()
+        {
+            var gcInfo = GC.GetGCMemoryInfo();
+            
+            // Add new GC info to history
+            _gcHistory.Add(gcInfo);
+            
+            // Enforce size limit to prevent memory exhaustion
+            if (_gcHistory.Count > MAX_GC_HISTORY_SIZE)
+            {
+                _gcHistory.RemoveAt(0); // Remove oldest entry
+            }
+        }
+        
+        /// <summary>
+        /// Get GC history statistics for monitoring
+        /// </summary>
+        public static string GetGCHistoryStats()
+        {
+            if (_gcHistory.Count == 0)
+                return "No GC history available";
+                
+            var recent = _gcHistory[_gcHistory.Count - 1];
+            return $"GC History: {_gcHistory.Count} entries, Latest: {recent.HeapSizeBytes / (1024 * 1024):F1}MB heap";
+        }
+        
+        /// <summary>
         /// Force garbage collection and measure impact
         /// </summary>
         public static GCImpactResult MeasureGCImpact()
@@ -260,6 +290,9 @@ namespace Lithobrake.Core
                 GcTime = stopwatch.Elapsed.TotalMilliseconds,
                 WithinTimeLimit = stopwatch.Elapsed.TotalMilliseconds < GC_WARNING_THRESHOLD
             };
+            
+            // Track GC history with size limits
+            TrackGCHistory();
             
             GD.Print($"GC Impact: Reclaimed {result.MemoryReclaimed} bytes in {result.GcTime:F3}ms");
             

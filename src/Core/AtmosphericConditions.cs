@@ -33,7 +33,7 @@ namespace Lithobrake.Core
                 
             // Exponential atmosphere model: ρ = ρ₀ * e^(-h/H)
             // where ρ₀ = sea level density, h = altitude, H = scale height
-            var densityRatio = Math.Exp(-altitude / ScaleHeight);
+            var densityRatio = FastMath.FastAtmosphericExp(altitude);
             return SeaLevelDensity * densityRatio;
         }
         
@@ -51,7 +51,7 @@ namespace Lithobrake.Core
                 altitude = 0.0; // Clamp to sea level
                 
             // Exponential atmosphere model: p = p₀ * e^(-h/H)
-            var pressureRatio = Math.Exp(-altitude / ScaleHeight);
+            var pressureRatio = FastMath.FastAtmosphericExp(altitude);
             return SeaLevelPressure * pressureRatio;
         }
         

@@ -11,7 +11,7 @@ namespace Lithobrake.Core
     /// Integrates with Double3 coordinate system for orbital mechanics.
     /// Supports floating origin system for precision preservation.
     /// </summary>
-    public partial class PhysicsVessel : Node3D, IOriginShiftAware
+    public partial class PhysicsVessel : Node3D, IOriginShiftAware, IDisposable
     {
         // Vessel identification
         private int _vesselId;
@@ -77,6 +77,10 @@ namespace Lithobrake.Core
         private readonly List<Engine> _engines = new();
         private readonly List<FuelTank> _fuelTanks = new();
         private double _currentThrottle = 0.0;
+        
+        // Cached component references to avoid O(n²) searches
+        private readonly Dictionary<int, List<Engine>> _partEngines = new();
+        private readonly Dictionary<int, List<FuelTank>> _partFuelTanks = new();
         private double _lastThrustUpdate = 0.0;
         private const double ThrustUpdateFrequency = 1.0 / 60.0; // 60Hz thrust updates
         
@@ -137,6 +141,12 @@ namespace Lithobrake.Core
             rigidBody.Mass = (float)mass;
             rigidBody.CollisionLayer = PhysicsManager.LayerVessel;
             rigidBody.CollisionMask = PhysicsManager.LayerStatic | PhysicsManager.LayerVessel;
+            
+            // Cache component references to avoid O(n²) searches later
+            CachePartComponents(part);
+            
+            // Invalidate FuelFlowSystem cache when parts change
+            FuelFlowSystem.InvalidateCache();
             
             GD.Print($"PhysicsVessel {_vesselId}: Added part {part.Id} with mass {mass:F1}kg");
             return true;
@@ -386,6 +396,12 @@ namespace Lithobrake.Core
             // Mark part as inactive (don't destroy RigidBody, let PhysicsManager handle it)
             part.IsActive = false;
             _massPropertiesDirty = true;
+            
+            // Clear cached component references for this part
+            ClearPartComponents(partId);
+            
+            // Invalidate FuelFlowSystem cache when parts change
+            FuelFlowSystem.InvalidateCache();
             
             GD.Print($"PhysicsVessel {_vesselId}: Removed part {partId} and {connectedJoints.Count} connected joints");
             return true;
@@ -762,6 +778,42 @@ namespace Lithobrake.Core
         }
         
         /// <summary>
+        /// Cache component references for a part to avoid O(n²) searches
+        /// </summary>
+        private void CachePartComponents(VesselPart part)
+        {
+            if (!GodotObject.IsInstanceValid(part.RigidBody))
+                return;
+                
+            var engines = new List<Engine>();
+            var fuelTanks = new List<FuelTank>();
+            
+            foreach (Node child in part.RigidBody.GetChildren())
+            {
+                if (child is Engine engine && !engine.IsQueuedForDeletion())
+                {
+                    engines.Add(engine);
+                }
+                else if (child is FuelTank fuelTank && !fuelTank.IsQueuedForDeletion())
+                {
+                    fuelTanks.Add(fuelTank);
+                }
+            }
+            
+            _partEngines[part.Id] = engines;
+            _partFuelTanks[part.Id] = fuelTanks;
+        }
+        
+        /// <summary>
+        /// Clear cached component references for a part
+        /// </summary>
+        private void ClearPartComponents(int partId)
+        {
+            _partEngines.Remove(partId);
+            _partFuelTanks.Remove(partId);
+        }
+        
+        /// <summary>
         /// Update lists of engines and fuel tanks from vessel parts
         /// </summary>
         private void UpdateEnginesAndFuelTanks()
@@ -770,35 +822,39 @@ namespace Lithobrake.Core
             _engines.Clear();
             _fuelTanks.Clear();
             
-            // Find engines and fuel tanks among vessel parts
+            // Use cached component references to avoid O(n²) searches
             foreach (var part in _parts)
             {
-                if (!part.IsActive || !GodotObject.IsInstanceValid(part.RigidBody))
+                if (!part.IsActive)
                     continue;
                 
-                // Look for Engine components
-                var engineNodes = part.RigidBody.GetChildren().OfType<Engine>().ToList();
-                foreach (var engine in engineNodes)
+                // Add cached engines for this part
+                if (_partEngines.TryGetValue(part.Id, out var engines))
                 {
-                    if (!engine.IsQueuedForDeletion())
+                    foreach (var engine in engines)
                     {
-                        _engines.Add(engine);
-                        
-                        // Register engine with throttle controller
-                        if (ThrottleController.Instance != null)
+                        if (!engine.IsQueuedForDeletion())
                         {
-                            ThrottleController.Instance.RegisterEngine(engine);
+                            _engines.Add(engine);
+                            
+                            // Register engine with throttle controller
+                            if (ThrottleController.Instance != null)
+                            {
+                                ThrottleController.Instance.RegisterEngine(engine);
+                            }
                         }
                     }
                 }
                 
-                // Look for FuelTank components
-                var fuelTankNodes = part.RigidBody.GetChildren().OfType<FuelTank>().ToList();
-                foreach (var tank in fuelTankNodes)
+                // Add cached fuel tanks for this part
+                if (_partFuelTanks.TryGetValue(part.Id, out var fuelTanks))
                 {
-                    if (!tank.IsQueuedForDeletion())
+                    foreach (var tank in fuelTanks)
                     {
-                        _fuelTanks.Add(tank);
+                        if (!tank.IsQueuedForDeletion())
+                        {
+                            _fuelTanks.Add(tank);
+                        }
                     }
                 }
             }
@@ -816,7 +872,7 @@ namespace Lithobrake.Core
             var seaLevelPressure = 101325.0; // Pa
             var scaleHeight = 7500.0; // m
             
-            return seaLevelPressure * Math.Exp(-altitude / scaleHeight);
+            return seaLevelPressure * FastMath.FastAtmosphericExp(altitude);
         }
         
         /// <summary>
@@ -1256,6 +1312,69 @@ namespace Lithobrake.Core
         /// Whether this vessel should receive origin shift notifications
         /// </summary>
         public bool ShouldReceiveOriginShifts => IsRegistered && _isActive;
+        
+        #endregion
+        
+        #region IDisposable Implementation
+        
+        private bool _disposed = false;
+        
+        /// <summary>
+        /// Dispose of Godot resources to prevent memory leaks
+        /// </summary>
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+        
+        /// <summary>
+        /// Dispose pattern implementation for proper resource cleanup
+        /// </summary>
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!_disposed && disposing)
+            {
+                // Clean up parts and their RigidBody3D resources
+                foreach (var part in _parts)
+                {
+                    if (part.RigidBody != null && GodotObject.IsInstanceValid(part.RigidBody))
+                    {
+                        part.RigidBody.QueueFree();
+                    }
+                }
+                _parts.Clear();
+                
+                // Clean up joints and their Joint3D resources
+                foreach (var joint in _joints)
+                {
+                    if (joint.Joint != null && GodotObject.IsInstanceValid(joint.Joint))
+                    {
+                        joint.Joint.QueueFree();
+                    }
+                }
+                _joints.Clear();
+                
+                // Clear other collections
+                _partLookup.Clear();
+                _jointLookup.Clear();
+                _engines.Clear();
+                _fuelTanks.Clear();
+                _partEngines.Clear();
+                _partFuelTanks.Clear();
+                
+                _disposed = true;
+            }
+        }
+        
+        /// <summary>
+        /// Override _ExitTree to ensure disposal
+        /// </summary>
+        public override void _ExitTree()
+        {
+            Dispose();
+            base._ExitTree();
+        }
         
         #endregion
     }

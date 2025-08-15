@@ -12,18 +12,8 @@ namespace Lithobrake.Core
     /// </summary>
     public partial class PhysicsManager : Node3D, IOriginShiftAware
     {
-        private static PhysicsManager? _instance;
-        public static PhysicsManager Instance
-        {
-            get
-            {
-                if (_instance == null)
-                {
-                    _instance = new PhysicsManager();
-                }
-                return _instance;
-            }
-        }
+        private static readonly Lazy<PhysicsManager> _lazyInstance = new(() => new PhysicsManager());
+        public static PhysicsManager Instance => _lazyInstance.Value;
 
         // Physics constants
         public const double FixedDelta = 1.0 / 60.0; // 60Hz physics tick
@@ -55,7 +45,13 @@ namespace Lithobrake.Core
 
         public override void _Ready()
         {
-            _instance = this;
+            // Thread-safe singleton validation
+            if (_lazyInstance.IsValueCreated && _lazyInstance.Value != this)
+            {
+                GD.PrintErr("PhysicsManager: Multiple instances detected!");
+                QueueFree();
+                return;
+            }
             
             // Configure physics world settings for Jolt
             ConfigurePhysicsWorld();
@@ -267,17 +263,15 @@ namespace Lithobrake.Core
         /// </summary>
         public static void InitializeSingleton()
         {
-            if (_instance == null)
-            {
-                _instance = new PhysicsManager();
-                GD.Print("PhysicsManager singleton created programmatically");
-            }
+            // Access the lazy instance to trigger initialization
+            var instance = Instance;
+            GD.Print("PhysicsManager singleton accessed via Lazy<T>");
         }
 
         /// <summary>
         /// Check if singleton is valid
         /// </summary>
-        public static new bool IsInstanceValid => _instance != null && GodotObject.IsInstanceValid(_instance);
+        public static new bool IsInstanceValid => _lazyInstance.IsValueCreated && GodotObject.IsInstanceValid(_lazyInstance.Value);
         
         /// <summary>
         /// Check if vessel should trigger coast period for origin shift

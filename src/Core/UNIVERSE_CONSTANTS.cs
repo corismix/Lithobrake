@@ -64,7 +64,7 @@ namespace Lithobrake.Core
             if (altitude >= KERBIN_ATMOSPHERE_HEIGHT)
                 return 0.0;
             
-            return KERBIN_SEA_LEVEL_PRESSURE * Math.Exp(-altitude / KERBIN_SCALE_HEIGHT);
+            return KERBIN_SEA_LEVEL_PRESSURE * FastMath.FastAtmosphericExp(altitude);
         }
         
         /// <summary>
@@ -77,7 +77,7 @@ namespace Lithobrake.Core
             if (altitude >= KERBIN_ATMOSPHERE_HEIGHT)
                 return 0.0;
             
-            return KERBIN_SEA_LEVEL_DENSITY * Math.Exp(-altitude / KERBIN_SCALE_HEIGHT);
+            return KERBIN_SEA_LEVEL_DENSITY * FastMath.FastAtmosphericExp(altitude);
         }
         
         /// <summary>

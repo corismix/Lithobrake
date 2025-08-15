@@ -10,11 +10,11 @@ namespace Lithobrake.Core
     /// Manages object pooling, performance optimization, and atmospheric effects scaling.
     /// Provides thrust vector visualization and engine state visual indicators.
     /// </summary>
-    public partial class EffectsManager : Node3D
+    public partial class EffectsManager : Node3D, IDisposable
     {
-        // Singleton pattern for global access
-        private static EffectsManager? _instance;
-        public static EffectsManager Instance => _instance ?? throw new InvalidOperationException("EffectsManager not initialized");
+        // Thread-safe singleton pattern for global access
+        private static readonly Lazy<EffectsManager> _lazyInstance = new(() => new EffectsManager());
+        public static EffectsManager Instance => _lazyInstance.Value;
         
         // Object pools for performance optimization
         private readonly ObjectPool<GpuParticles3D> _exhaustParticlePool = new();
@@ -42,17 +42,16 @@ namespace Lithobrake.Core
         
         public override void _Ready()
         {
-            if (_instance == null)
-            {
-                _instance = this;
-                InitializeObjectPools();
-                GD.Print("EffectsManager: Initialized as singleton with object pooling and heating effects integration");
-            }
-            else
+            // Thread-safe singleton validation
+            if (_lazyInstance.IsValueCreated && _lazyInstance.Value != this)
             {
                 GD.PrintErr("EffectsManager: Multiple instances detected!");
                 QueueFree();
+                return;
             }
+            
+            InitializeObjectPools();
+            GD.Print("EffectsManager: Initialized as singleton with object pooling and heating effects integration");
         }
         
         /// <summary>
@@ -584,13 +583,48 @@ namespace Lithobrake.Core
                 RemoveThrustVisualization(engine);
             }
             
-            if (_instance == this)
-            {
-                _instance = null;
-            }
+            // Note: Lazy<T> instances cannot be reset, they are cleaned up by GC
+            
+            // Ensure proper resource disposal
+            Dispose();
             
             base._ExitTree();
         }
+        
+        #region IDisposable Implementation
+        
+        private bool _disposed = false;
+        
+        /// <summary>
+        /// Dispose of GPU particle systems and lighting resources to prevent memory leaks
+        /// </summary>
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+        
+        /// <summary>
+        /// Dispose pattern implementation for proper resource cleanup
+        /// </summary>
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!_disposed && disposing)
+            {
+                // Clean up object pools and their Godot resources
+                _exhaustParticlePool?.Dispose();
+                _thrustArrowPool?.Dispose();
+                _exhaustLightPool?.Dispose();
+                
+                // Clear effect tracking collections
+                _engineEffects.Clear();
+                _thrustVisualizations.Clear();
+                
+                _disposed = true;
+            }
+        }
+        
+        #endregion
     }
     
     /// <summary>
@@ -680,7 +714,7 @@ namespace Lithobrake.Core
     /// Simple object pool for performance optimization
     /// </summary>
     /// <typeparam name="T">Type of object to pool</typeparam>
-    public class ObjectPool<T> where T : Node, new()
+    public class ObjectPool<T> : IDisposable where T : Node, new()
     {
         private readonly Queue<T> _objects = new();
         
@@ -715,6 +749,21 @@ namespace Lithobrake.Core
                 }
                 
                 _objects.Enqueue(obj);
+            }
+        }
+        
+        /// <summary>
+        /// Dispose of all pooled objects to prevent memory leaks
+        /// </summary>
+        public void Dispose()
+        {
+            while (_objects.Count > 0)
+            {
+                var obj = _objects.Dequeue();
+                if (obj != null && GodotObject.IsInstanceValid(obj))
+                {
+                    obj.QueueFree();
+                }
             }
         }
     }

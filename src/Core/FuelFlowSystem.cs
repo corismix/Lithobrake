@@ -19,10 +19,65 @@ namespace Lithobrake.Core
         // Performance targets from current-task.md
         private const double FuelConsumptionBudget = 0.1; // ms per frame per fuel tank
         
+        // Cached collections to avoid LINQ operations in 60Hz loops
+        private static List<Engine> _cachedActiveEngines = new();
+        private static List<FuelTank> _cachedAvailableTanks = new();
+        private static bool _engineCacheValid = false;
+        private static bool _tankCacheValid = false;
+        
         // Fuel flow constants
         private const double FuelTransferRate = 100.0; // Units per second default
         private const double MinimumFuelTransfer = 0.1; // Minimum fuel to transfer
         private const double FuelStarvationThreshold = 0.1; // Fuel level for starvation
+        
+        /// <summary>
+        /// Get active engines using cached collection to avoid LINQ in 60Hz loops
+        /// </summary>
+        private static List<Engine> GetActiveEngines(List<Engine> engines)
+        {
+            if (!_engineCacheValid)
+            {
+                _cachedActiveEngines.Clear();
+                foreach (var engine in engines)
+                {
+                    if (engine != null && !engine.IsQueuedForDeletion() && engine.IsActive)
+                    {
+                        _cachedActiveEngines.Add(engine);
+                    }
+                }
+                _engineCacheValid = true;
+            }
+            return _cachedActiveEngines;
+        }
+        
+        /// <summary>
+        /// Get available fuel tanks using cached collection to avoid LINQ in 60Hz loops
+        /// </summary>
+        private static List<FuelTank> GetAvailableTanks(List<FuelTank> fuelTanks)
+        {
+            if (!_tankCacheValid)
+            {
+                _cachedAvailableTanks.Clear();
+                foreach (var tank in fuelTanks)
+                {
+                    if (tank != null && !tank.IsQueuedForDeletion())
+                    {
+                        _cachedAvailableTanks.Add(tank);
+                    }
+                }
+                _tankCacheValid = true;
+            }
+            return _cachedAvailableTanks;
+        }
+        
+        /// <summary>
+        /// Invalidate cached collections when engines/tanks change
+        /// </summary>
+        public static void InvalidateCache()
+        {
+            _engineCacheValid = false;
+            _tankCacheValid = false;
+        }
         
         /// <summary>
         /// Update fuel flow for all engines and tanks in a vessel
@@ -38,8 +93,8 @@ namespace Lithobrake.Core
             if (engines == null || fuelTanks == null || deltaTime <= 0)
                 return result;
             
-            var activeEngines = engines.Where(e => e != null && !e.IsQueuedForDeletion() && e.IsActive).ToList();
-            var availableTanks = fuelTanks.Where(t => t != null && !t.IsQueuedForDeletion()).ToList();
+            var activeEngines = GetActiveEngines(engines);
+            var availableTanks = GetAvailableTanks(fuelTanks);
             
             _tanksProcessed = availableTanks.Count;
             
@@ -210,9 +265,15 @@ namespace Lithobrake.Core
         /// <param name="deltaTime">Time step in seconds</param>
         private static void ProcessCrossfeed(List<FuelTank> fuelTanks, double deltaTime)
         {
-            foreach (var tank in fuelTanks.Where(t => t.CanCrossfeed && t.IsTransferring))
+            // Use foreach loop instead of LINQ to avoid allocation pressure
+            foreach (var tank in fuelTanks)
             {
-                foreach (var connectedTank in tank.ConnectedTanks.ToList())
+                if (!tank.CanCrossfeed || !tank.IsTransferring)
+                    continue;
+                    
+                // Create temporary list to avoid modification during iteration
+                var connectedTanks = new List<FuelTank>(tank.ConnectedTanks);
+                foreach (var connectedTank in connectedTanks)
                 {
                     if (connectedTank == null || connectedTank.IsQueuedForDeletion())
                     {
@@ -283,9 +344,19 @@ namespace Lithobrake.Core
         {
             var starvedEngines = new List<Engine>();
             
-            foreach (var engine in engines.Where(e => e != null && !e.IsQueuedForDeletion() && e.IsActive))
+            // Use foreach loop instead of LINQ to avoid allocation pressure
+            foreach (var engine in engines)
             {
-                var accessibleTanks = BuildFuelNetworkTree(engine, fuelTanks.ToList());
+                if (engine == null || engine.IsQueuedForDeletion() || !engine.IsActive)
+                    continue;
+                    
+                // Create list from enumerable to avoid ToList() allocation
+                var tankList = new List<FuelTank>();
+                foreach (var tank in fuelTanks)
+                {
+                    tankList.Add(tank);
+                }
+                var accessibleTanks = BuildFuelNetworkTree(engine, tankList);
                 var availableFuel = accessibleTanks.Sum(t => t.LiquidFuel);
                 
                 if (availableFuel < FuelStarvationThreshold)

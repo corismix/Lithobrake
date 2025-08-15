@@ -12,9 +12,9 @@ namespace Lithobrake.Core
     /// </summary>
     public partial class Atmosphere : Node
     {
-        // Singleton pattern for global access
-        private static Atmosphere? _instance;
-        public static Atmosphere Instance => _instance ?? throw new InvalidOperationException("Atmosphere not initialized");
+        // Thread-safe singleton pattern for global access
+        private static readonly Lazy<Atmosphere> _lazyInstance = new(() => new Atmosphere());
+        public static Atmosphere Instance => _lazyInstance.Value;
         
         // Atmospheric model constants
         private const double SEA_LEVEL_TEMPERATURE = 288.15; // 15°C in Kelvin
@@ -37,17 +37,16 @@ namespace Lithobrake.Core
         
         public override void _Ready()
         {
-            if (_instance == null)
-            {
-                _instance = this;
-                PrecomputeAtmosphericTable();
-                GD.Print("Atmosphere: Initialized with exponential density model and temperature gradients");
-            }
-            else
+            // Thread-safe singleton validation
+            if (_lazyInstance.IsValueCreated && _lazyInstance.Value != this)
             {
                 GD.PrintErr("Atmosphere: Multiple instances detected!");
                 QueueFree();
+                return;
             }
+            
+            PrecomputeAtmosphericTable();
+            GD.Print("Atmosphere: Initialized with exponential density model and temperature gradients");
         }
         
         /// <summary>
@@ -88,7 +87,7 @@ namespace Lithobrake.Core
             else if (altitude < 0)
             {
                 // Below sea level - increase density slightly
-                density = UNIVERSE_CONSTANTS.KERBIN_SEA_LEVEL_DENSITY * Math.Exp(-altitude / UNIVERSE_CONSTANTS.KERBIN_SCALE_HEIGHT);
+                density = UNIVERSE_CONSTANTS.KERBIN_SEA_LEVEL_DENSITY * FastMath.FastAtmosphericExp(altitude);
             }
             else
             {
@@ -120,7 +119,7 @@ namespace Lithobrake.Core
             if (altitude < 0)
             {
                 // Below sea level - increase pressure
-                return UNIVERSE_CONSTANTS.KERBIN_SEA_LEVEL_PRESSURE * Math.Exp(-altitude / UNIVERSE_CONSTANTS.KERBIN_SCALE_HEIGHT);
+                return UNIVERSE_CONSTANTS.KERBIN_SEA_LEVEL_PRESSURE * FastMath.FastAtmosphericExp(altitude);
             }
             
             // Use UNIVERSE_CONSTANTS for consistency
@@ -293,11 +292,7 @@ namespace Lithobrake.Core
         /// </summary>
         public override void _ExitTree()
         {
-            if (_instance == this)
-            {
-                _instance = null;
-            }
-            
+            // Note: Lazy<T> instances cannot be reset, they are cleaned up by GC
             base._ExitTree();
         }
     }

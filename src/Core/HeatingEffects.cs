@@ -12,9 +12,9 @@ namespace Lithobrake.Core
     /// </summary>
     public partial class HeatingEffects : Node
     {
-        // Singleton pattern for global access
-        private static HeatingEffects? _instance;
-        public static HeatingEffects Instance => _instance ?? throw new InvalidOperationException("HeatingEffects not initialized");
+        // Thread-safe singleton pattern for global access
+        private static readonly Lazy<HeatingEffects> _lazyInstance = new(() => new HeatingEffects());
+        public static HeatingEffects Instance => _lazyInstance.Value;
         
         // Heating effect tracking
         private readonly Dictionary<Part, HeatingEffect> _partHeatingEffects = new();
@@ -50,17 +50,16 @@ namespace Lithobrake.Core
         
         public override void _Ready()
         {
-            if (_instance == null)
-            {
-                _instance = this;
-                InitializeObjectPools();
-                GD.Print("HeatingEffects: Initialized with red glow effects and particle heating visualization");
-            }
-            else
+            // Thread-safe singleton validation
+            if (_lazyInstance.IsValueCreated && _lazyInstance.Value != this)
             {
                 GD.PrintErr("HeatingEffects: Multiple instances detected!");
                 QueueFree();
+                return;
             }
+            
+            InitializeObjectPools();
+            GD.Print("HeatingEffects: Initialized with red glow effects and particle heating visualization");
         }
         
         /// <summary>
@@ -492,11 +491,7 @@ namespace Lithobrake.Core
                 RemovePartHeatingEffect(part);
             }
             
-            if (_instance == this)
-            {
-                _instance = null;
-            }
-            
+            // Note: Lazy<T> instances cannot be reset, they are cleaned up by GC
             base._ExitTree();
         }
     }

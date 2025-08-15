@@ -156,7 +156,7 @@ namespace Lithobrake.Core
             if (altitude < 0)
                 altitude = 0; // Clamp to surface level
             
-            return SurfacePressure * Math.Exp(-altitude / ScaleHeight);
+            return SurfacePressure * FastMath.FastAtmosphericExp(altitude);
         }
         
         /// <summary>
@@ -176,7 +176,7 @@ namespace Lithobrake.Core
             if (altitude < 0)
                 altitude = 0; // Clamp to surface level
             
-            return SurfaceDensity * Math.Exp(-altitude / ScaleHeight);
+            return SurfaceDensity * FastMath.FastAtmosphericExp(altitude);
         }
         
         /// <summary>

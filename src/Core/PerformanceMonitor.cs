@@ -11,18 +11,8 @@ namespace Lithobrake.Core
     /// </summary>
     public partial class PerformanceMonitor : CanvasLayer
     {
-        private static PerformanceMonitor _instance;
-        public static PerformanceMonitor Instance
-        {
-            get
-            {
-                if (_instance == null)
-                {
-                    _instance = new PerformanceMonitor();
-                }
-                return _instance;
-            }
-        }
+        private static readonly Lazy<PerformanceMonitor> _lazyInstance = new(() => new PerformanceMonitor());
+        public static PerformanceMonitor Instance => _lazyInstance.Value;
         
         private Label _performanceLabel;
         private Stopwatch _frameTimer = new Stopwatch();
@@ -57,21 +47,35 @@ namespace Lithobrake.Core
         
         public override void _Ready()
         {
-            // Set singleton instance
-            _instance = this;
+            // Thread-safe singleton validation
+            if (_lazyInstance.IsValueCreated && _lazyInstance.Value != this)
+            {
+                GD.PrintErr("PerformanceMonitor: Multiple instances detected!");
+                QueueFree();
+                return;
+            }
             
             // Create UI overlay
             _performanceLabel = new Label();
             _performanceLabel.Position = new Vector2(10, 10);
-            _performanceLabel.AddThemeStyleboxOverride("normal", new StyleBoxFlat());
-            var styleBox = _performanceLabel.GetThemeStylebox("normal") as StyleBoxFlat;
-            if (styleBox != null)
+            
+            // Create StyleBox with null safety
+            var styleBox = new StyleBoxFlat();
+            styleBox.BgColor = new Color(0, 0, 0, 0.7f);
+            styleBox.ContentMarginLeft = 8;
+            styleBox.ContentMarginRight = 8;
+            styleBox.ContentMarginTop = 4;
+            styleBox.ContentMarginBottom = 4;
+            
+            // Apply StyleBox with fallback
+            try
             {
-                styleBox.BgColor = new Color(0, 0, 0, 0.7f);
-                styleBox.ContentMarginLeft = 8;
-                styleBox.ContentMarginRight = 8;
-                styleBox.ContentMarginTop = 4;
-                styleBox.ContentMarginBottom = 4;
+                _performanceLabel.AddThemeStyleboxOverride("normal", styleBox);
+            }
+            catch (Exception ex)
+            {
+                GD.PrintErr($"PerformanceMonitor: Failed to apply StyleBox override: {ex.Message}");
+                // Continue without styling - the label will still function
             }
             
             AddChild(_performanceLabel);
@@ -87,17 +91,15 @@ namespace Lithobrake.Core
         /// </summary>
         public static void InitializeSingleton()
         {
-            if (_instance == null)
-            {
-                _instance = new PerformanceMonitor();
-                GD.Print("PerformanceMonitor singleton created programmatically");
-            }
+            // Access the lazy instance to trigger initialization
+            var instance = Instance;
+            GD.Print("PerformanceMonitor singleton accessed via Lazy<T>");
         }
         
         /// <summary>
         /// Access singleton instance safely
         /// </summary>
-        public static new bool IsInstanceValid => _instance != null && GodotObject.IsInstanceValid(_instance);
+        public static new bool IsInstanceValid => _lazyInstance.IsValueCreated && GodotObject.IsInstanceValid(_lazyInstance.Value);
         
         public override void _Process(double delta)
         {

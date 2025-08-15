@@ -441,6 +441,11 @@ namespace Lithobrake.Core
         /// </summary>
         public static void Cleanup()
         {
+            // Clean up static events to prevent memory leaks
+            OnCatalogLoaded = null;
+            OnCatalogReloaded = null;
+            OnCatalogError = null;
+            
             _fileWatcher?.Dispose();
             _fileWatcher = null;
             _partDefinitions.Clear();

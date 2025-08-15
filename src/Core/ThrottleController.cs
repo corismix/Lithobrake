@@ -12,9 +12,9 @@ namespace Lithobrake.Core
     /// </summary>
     public partial class ThrottleController : Node
     {
-        // Singleton pattern for global access
-        private static ThrottleController? _instance;
-        public static ThrottleController Instance => _instance ?? throw new InvalidOperationException("ThrottleController not initialized");
+        // Thread-safe singleton pattern for global access
+        private static readonly Lazy<ThrottleController> _lazyInstance = new(() => new ThrottleController());
+        public static ThrottleController Instance => _lazyInstance.Value;
         
         // Throttle state
         private double _currentThrottle = 0.0;
@@ -41,16 +41,15 @@ namespace Lithobrake.Core
         
         public override void _Ready()
         {
-            if (_instance == null)
-            {
-                _instance = this;
-                GD.Print("ThrottleController: Initialized as singleton");
-            }
-            else
+            // Thread-safe singleton validation
+            if (_lazyInstance.IsValueCreated && _lazyInstance.Value != this)
             {
                 GD.PrintErr("ThrottleController: Multiple instances detected!");
                 QueueFree();
+                return;
             }
+            
+            GD.Print("ThrottleController: Initialized as singleton");
         }
         
         /// <summary>
@@ -275,9 +274,12 @@ namespace Lithobrake.Core
         /// <param name="engines">Engines to register</param>
         public void RegisterEngines(IEnumerable<Engine> engines)
         {
-            foreach (var engine in engines.Where(e => e != null))
+            foreach (var engine in engines)
             {
-                RegisterEngine(engine);
+                if (engine != null)
+                {
+                    RegisterEngine(engine);
+                }
             }
         }
         
@@ -371,11 +373,7 @@ namespace Lithobrake.Core
         {
             _managedEngines.Clear();
             
-            if (_instance == this)
-            {
-                _instance = null;
-            }
-            
+            // Note: Lazy<T> instances cannot be reset, they are cleaned up by GC
             base._ExitTree();
         }
     }
