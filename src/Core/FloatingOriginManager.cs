@@ -2,6 +2,7 @@ using Godot;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Lithobrake.Core.Utils;
 
 namespace Lithobrake.Core
 {
@@ -22,9 +23,7 @@ namespace Lithobrake.Core
         private double _lastShiftTime = 0.0;
         private const double MinShiftInterval = 5.0; // Minimum 5 seconds between shifts
         
-        // Coast period gating requirements
-        private const double MaxDynamicPressureForShift = 1000.0; // 1 kPa max Q for safe shifts
-        private const double MaxThrustForShift = 1.0; // 1 N max thrust for safe shifts
+        // Coast period gating requirements (implementation pending)
         private bool _lastShiftWasSafe = true;
         
         // Origin shift aware systems registry
@@ -54,11 +53,11 @@ namespace Lithobrake.Core
             if (_instance == null)
             {
                 _instance = this;
-                GD.Print("FloatingOriginManager: Singleton initialized");
+                Debug.Log("FloatingOriginManager: Singleton initialized");
             }
             else
             {
-                GD.PrintErr("FloatingOriginManager: Multiple instances detected! This should be a singleton.");
+                Debug.LogError("FloatingOriginManager: Multiple instances detected! This should be a singleton.");
                 QueueFree();
                 return;
             }
@@ -113,14 +112,14 @@ namespace Lithobrake.Core
                         }
                         else
                         {
-                            GD.Print($"FloatingOriginManager: Origin shift needed but not in coast period (Q or thrust too high)");
+                            Debug.Log($"FloatingOriginManager: Origin shift needed but not in coast period (Q or thrust too high)");
                         }
                     }
                 }
             }
             catch (Exception ex)
             {
-                GD.PrintErr($"FloatingOriginManager: Critical error in distance monitoring: {ex.Message}");
+                Debug.LogError($"FloatingOriginManager: Critical error in distance monitoring: {ex.Message}");
                 // Continue operation - don't crash the physics system
             }
         }
@@ -170,7 +169,7 @@ namespace Lithobrake.Core
                 _instance._registeredSystems.Add(new WeakReference<IOriginShiftAware>(system));
                 system.IsRegistered = true;
                 
-                GD.Print($"FloatingOriginManager: Registered {system.GetType().Name} for origin shift notifications");
+                Debug.Log($"FloatingOriginManager: Registered {system.GetType().Name} for origin shift notifications");
             }
         }
         
@@ -187,7 +186,7 @@ namespace Lithobrake.Core
                 system.IsRegistered = false;
                 // Cleanup will happen periodically in NotifyRegisteredSystems
                 
-                GD.Print($"FloatingOriginManager: Unregistered {system.GetType().Name} from origin shift notifications");
+                Debug.Log($"FloatingOriginManager: Unregistered {system.GetType().Name} from origin shift notifications");
             }
         }
         
@@ -212,7 +211,7 @@ namespace Lithobrake.Core
             
             try
             {
-                GD.Print($"FloatingOriginManager: Starting origin shift by {shiftAmount} (distance: {shiftAmount.Length:F1}m)");
+                Debug.Log($"FloatingOriginManager: Starting origin shift by {shiftAmount} (distance: {shiftAmount.Length:F1}m)");
                 
                 // Update world origin
                 _currentWorldOrigin += shiftAmount;
@@ -238,19 +237,19 @@ namespace Lithobrake.Core
                 _lastShiftDuration = stopwatch.Elapsed.TotalMilliseconds;
                 _totalShiftTime += _lastShiftDuration;
                 
-                GD.Print($"FloatingOriginManager: Origin shift completed in {_lastShiftDuration:F3}ms (total shifts: {_totalShifts})");
+                Debug.Log($"FloatingOriginManager: Origin shift completed in {_lastShiftDuration:F3}ms (total shifts: {_totalShifts})");
                 
                 // Check performance target
                 if (_lastShiftDuration > MaxShiftDuration)
                 {
-                    GD.PrintErr($"FloatingOriginManager: Shift exceeded performance target ({_lastShiftDuration:F3}ms > {MaxShiftDuration:F1}ms)");
+                    Debug.LogWarning($"FloatingOriginManager: Shift exceeded performance target ({_lastShiftDuration:F3}ms > {MaxShiftDuration:F1}ms)");
                 }
             }
             catch (Exception ex)
             {
                 stopwatch.Stop();
                 _lastShiftWasSafe = false;
-                GD.PrintErr($"FloatingOriginManager: Origin shift failed with exception: {ex.Message}");
+                Debug.LogError($"FloatingOriginManager: Origin shift failed with exception: {ex.Message}");
             }
         }
         
@@ -296,7 +295,7 @@ namespace Lithobrake.Core
                     }
                     catch (Exception ex)
                     {
-                        GD.PrintErr($"FloatingOriginManager: Error notifying {system.GetType().Name}: {ex.Message}");
+                        Debug.LogError($"FloatingOriginManager: Error notifying {system.GetType().Name}: {ex.Message}");
                     }
                 }
                 
@@ -305,10 +304,10 @@ namespace Lithobrake.Core
                 
                 if (notificationTime > 0.5) // 0.5ms target for notifications
                 {
-                    GD.PrintErr($"FloatingOriginManager: System notifications took {notificationTime:F3}ms (target: 0.5ms)");
+                    Debug.LogWarning($"FloatingOriginManager: System notifications took {notificationTime:F3}ms (target: 0.5ms)");
                 }
                 
-                GD.Print($"FloatingOriginManager: Notified {notificationCount} systems in {notificationTime:F3}ms");
+                Debug.Log($"FloatingOriginManager: Notified {notificationCount} systems in {notificationTime:F3}ms");
             }
         }
         
@@ -330,7 +329,7 @@ namespace Lithobrake.Core
             int cleanedUp = originalCount - _registeredSystems.Count;
             if (cleanedUp > 0)
             {
-                GD.Print($"FloatingOriginManager: Cleaned up {cleanedUp} dead references from registry");
+                Debug.Log($"FloatingOriginManager: Cleaned up {cleanedUp} dead references from registry");
             }
         }
         
@@ -377,13 +376,13 @@ namespace Lithobrake.Core
             
             if (currentError > MaxAcceptablePrecisionError)
             {
-                GD.PrintErr($"FloatingOriginManager: Precision error exceeds threshold: {currentError:E} > {MaxAcceptablePrecisionError:E}");
+                Debug.LogError($"FloatingOriginManager: Precision error exceeds threshold: {currentError:E} > {MaxAcceptablePrecisionError:E}");
             }
             
             // Reset precision test if error gets too large
             if (_cumulativePrecisionError > MaxAcceptablePrecisionError * 100)
             {
-                GD.Print("FloatingOriginManager: Resetting precision validation test");
+                Debug.Log("FloatingOriginManager: Resetting precision validation test");
                 _precisionTestPosition = new Double3(1000000.0, 1000000.0, 1000000.0);
                 _cumulativePrecisionError = 0.0;
             }
@@ -428,7 +427,7 @@ namespace Lithobrake.Core
         {
             if (_instance == null) return;
             
-            GD.Print($"FloatingOriginManager: Forcing origin shift for testing: {shiftAmount}");
+            Debug.Log($"FloatingOriginManager: Forcing origin shift for testing: {shiftAmount}");
             _instance.RequestOriginShift(shiftAmount);
         }
         
@@ -462,7 +461,7 @@ namespace Lithobrake.Core
                 _instance._precisionTestPosition = new Double3(1000000.0, 1000000.0, 1000000.0);
                 _instance._cumulativePrecisionError = 0.0;
                 
-                GD.Print("FloatingOriginManager: System reset to initial state");
+                Debug.Log("FloatingOriginManager: System reset to initial state");
             }
         }
     }

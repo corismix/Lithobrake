@@ -2,6 +2,7 @@ using Godot;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Lithobrake.Core.Utils;
 
 namespace Lithobrake.Core
 {
@@ -75,7 +76,7 @@ namespace Lithobrake.Core
             
             if (duration > ThrustCalculationBudget * activeEngines.Count)
             {
-                GD.PrintErr($"ThrustSystem: Calculation exceeded budget - {duration:F2}ms for {activeEngines.Count} engines (target: {ThrustCalculationBudget * activeEngines.Count:F2}ms)");
+                Debug.LogWarning($"ThrustSystem: Calculation exceeded budget - {duration:F2}ms for {activeEngines.Count} engines (target: {ThrustCalculationBudget * activeEngines.Count:F2}ms)");
             }
             
             return result;
@@ -143,7 +144,7 @@ namespace Lithobrake.Core
             
             if (duration > PhysicsIntegrationBudget)
             {
-                GD.PrintErr($"ThrustSystem: Physics integration exceeded budget - {duration:F2}ms (target: {PhysicsIntegrationBudget:F2}ms)");
+                Debug.LogWarning($"ThrustSystem: Physics integration exceeded budget - {duration:F2}ms (target: {PhysicsIntegrationBudget:F2}ms)");
             }
         }
         

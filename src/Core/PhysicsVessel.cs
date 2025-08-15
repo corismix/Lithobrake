@@ -2,6 +2,7 @@ using Godot;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Lithobrake.Core.Utils;
 
 namespace Lithobrake.Core
 {
@@ -93,7 +94,7 @@ namespace Lithobrake.Core
         /// </summary>
         public override void _Ready()
         {
-            GD.Print($"PhysicsVessel: Node ready, waiting for initialization");
+            Debug.Log($"PhysicsVessel: Node ready, waiting for initialization");
         }
         
         /// <summary>
@@ -117,7 +118,7 @@ namespace Lithobrake.Core
             // Register with floating origin system
             FloatingOriginManager.RegisterOriginShiftAware(this);
             
-            GD.Print($"PhysicsVessel {_vesselId}: Initialized with anti-wobble, orbital mechanics, and floating origin systems");
+            Debug.Log($"PhysicsVessel {_vesselId}: Initialized with anti-wobble, orbital mechanics, and floating origin systems");
         }
         
         /// <summary>
@@ -127,7 +128,7 @@ namespace Lithobrake.Core
         {
             if (_parts.Count >= MaxParts)
             {
-                GD.PrintErr($"PhysicsVessel {_vesselId}: Cannot add part - vessel at maximum {MaxParts} parts");
+                Debug.LogError($"PhysicsVessel {_vesselId}: Cannot add part - vessel at maximum {MaxParts} parts");
                 return false;
             }
             
@@ -155,7 +156,7 @@ namespace Lithobrake.Core
             // Invalidate FuelFlowSystem cache when parts change
             FuelFlowSystem.InvalidateCache();
             
-            GD.Print($"PhysicsVessel {_vesselId}: Added part {part.Id} with mass {mass:F1}kg");
+            Debug.Log($"PhysicsVessel {_vesselId}: Added part {part.Id} with mass {mass:F1}kg");
             return true;
         }
         
@@ -175,7 +176,7 @@ namespace Lithobrake.Core
             if (!_partLookup.TryGetValue(partA, out var partARef) || 
                 !_partLookup.TryGetValue(partB, out var partBRef))
             {
-                GD.PrintErr($"PhysicsVessel {_vesselId}: Cannot create joint - invalid part IDs");
+                Debug.LogError($"PhysicsVessel {_vesselId}: Cannot create joint - invalid part IDs");
                 return false;
             }
             
@@ -232,7 +233,7 @@ namespace Lithobrake.Core
             
             if (joint == null)
             {
-                GD.PrintErr($"PhysicsVessel {_vesselId}: Failed to create joint type {jointType}");
+                Debug.LogError($"PhysicsVessel {_vesselId}: Failed to create joint type {jointType}");
                 return false;
             }
             
@@ -264,7 +265,7 @@ namespace Lithobrake.Core
             
             _joints.Add(vesselJoint);
             
-            GD.Print($"PhysicsVessel {_vesselId}: Created {jointType} joint between parts {partA} and {partB} with tuning");
+            Debug.Log($"PhysicsVessel {_vesselId}: Created {jointType} joint between parts {partA} and {partB} with tuning");
             return true;
         }
         
@@ -298,7 +299,7 @@ namespace Lithobrake.Core
             // Validate joint exists and is active
             if (jointId < 0 || jointId >= _joints.Count)
             {
-                GD.PrintErr($"PhysicsVessel {_vesselId}: Invalid joint ID {jointId} for separation");
+                Debug.LogError($"PhysicsVessel {_vesselId}: Invalid joint ID {jointId} for separation");
                 return false;
             }
             
@@ -313,7 +314,7 @@ namespace Lithobrake.Core
             if (!_partLookup.TryGetValue(joint.PartA, out var partA) || 
                 !_partLookup.TryGetValue(joint.PartB, out var partB))
             {
-                GD.PrintErr($"PhysicsVessel {_vesselId}: Cannot find parts for joint {jointId} separation");
+                Debug.LogError($"PhysicsVessel {_vesselId}: Cannot find parts for joint {jointId} separation");
                 return false;
             }
             
@@ -354,14 +355,14 @@ namespace Lithobrake.Core
                 // Validate physics state
                 if (!separationEvent.ValidatePhysics())
                 {
-                    GD.PrintErr($"PhysicsVessel {_vesselId}: Separation {separationEvent.EventId} failed physics validation");
+                    Debug.LogError($"PhysicsVessel {_vesselId}: Separation {separationEvent.EventId} failed physics validation");
                     separationEvent.MarkFailure("Physics validation failed", SeparationValidationResult.PhysicsError);
                     _separationHistory.Add(separationEvent);
                     return false;
                 }
                 
                 _separationHistory.Add(separationEvent);
-                GD.Print($"PhysicsVessel {_vesselId}: Successfully separated joint {jointId} with {customImpulse:F1}N·s impulse in {startTime.Elapsed.TotalMilliseconds:F3}ms");
+                Debug.Log($"PhysicsVessel {_vesselId}: Successfully separated joint {jointId} with {customImpulse:F1}N·s impulse in {startTime.Elapsed.TotalMilliseconds:F3}ms");
                 return true;
             }
             catch (Exception ex)
@@ -369,7 +370,7 @@ namespace Lithobrake.Core
                 // Operation failed - mark as failed
                 separationEvent.MarkFailure($"Exception during separation: {ex.Message}", SeparationValidationResult.PhysicsError);
                 _separationHistory.Add(separationEvent);
-                GD.PrintErr($"PhysicsVessel {_vesselId}: Separation failed with exception: {ex.Message}");
+                Debug.LogError($"PhysicsVessel {_vesselId}: Separation failed with exception: {ex.Message}");
                 return false;
             }
             finally
@@ -379,7 +380,7 @@ namespace Lithobrake.Core
                 // Ensure operation completed within performance budget
                 if (startTime.Elapsed.TotalMilliseconds > MaxSeparationTime)
                 {
-                    GD.PrintErr($"PhysicsVessel {_vesselId}: Separation took {startTime.Elapsed.TotalMilliseconds:F3}ms (exceeds {MaxSeparationTime}ms target)");
+                    Debug.LogWarning($"PhysicsVessel {_vesselId}: Separation took {startTime.Elapsed.TotalMilliseconds:F3}ms (exceeds {MaxSeparationTime}ms target)");
                 }
             }
         }
@@ -391,7 +392,7 @@ namespace Lithobrake.Core
         {
             if (!_partLookup.TryGetValue(partId, out var part))
             {
-                GD.PrintErr($"PhysicsVessel {_vesselId}: Cannot remove part {partId} - not found");
+                Debug.LogError($"PhysicsVessel {_vesselId}: Cannot remove part {partId} - not found");
                 return false;
             }
             
@@ -428,7 +429,7 @@ namespace Lithobrake.Core
             // Invalidate FuelFlowSystem cache when parts change
             FuelFlowSystem.InvalidateCache();
             
-            GD.Print($"PhysicsVessel {_vesselId}: Removed part {partId} and {connectedJoints.Count} connected joints");
+            Debug.Log($"PhysicsVessel {_vesselId}: Removed part {partId} and {connectedJoints.Count} connected joints");
             return true;
         }
         
@@ -791,7 +792,7 @@ namespace Lithobrake.Core
             // Handle fuel starvation events
             foreach (var starvationEvent in fuelResult.StarvationEvents)
             {
-                GD.PrintErr($"PhysicsVessel {_vesselId}: Engine {starvationEvent.Engine.PartName} starved of fuel");
+                Debug.LogError($"PhysicsVessel {_vesselId}: Engine {starvationEvent.Engine.PartName} starved of fuel");
                 starvationEvent.Engine.SetActive(false);
             }
             
@@ -910,7 +911,7 @@ namespace Lithobrake.Core
                 }
             }
             
-            GD.Print($"PhysicsVessel {_vesselId}: Found {_engines.Count} engines and {_fuelTanks.Count} fuel tanks");
+            Debug.Log($"PhysicsVessel {_vesselId}: Found {_engines.Count} engines and {_fuelTanks.Count} fuel tanks");
         }
         
         /// <summary>
@@ -969,12 +970,12 @@ namespace Lithobrake.Core
                 var duration = Time.GetTicksMsec() - startTime;
                 if (duration > 0.3) // Target: <0.3ms atmospheric processing per vessel
                 {
-                    GD.PrintErr($"PhysicsVessel {_vesselId}: Atmospheric processing exceeded budget - {duration:F2}ms (target: 0.3ms)");
+                    Debug.LogWarning($"PhysicsVessel {_vesselId}: Atmospheric processing exceeded budget - {duration:F2}ms (target: 0.3ms)");
                 }
             }
             catch (Exception ex)
             {
-                GD.PrintErr($"PhysicsVessel {_vesselId}: Atmospheric processing failed: {ex.Message}");
+                Debug.LogError($"PhysicsVessel {_vesselId}: Atmospheric processing failed: {ex.Message}");
             }
         }
         
@@ -1069,7 +1070,7 @@ namespace Lithobrake.Core
         {
             _separationHistory.Clear();
             _nextEventId = 0;
-            GD.Print($"PhysicsVessel {_vesselId}: Cleared separation history");
+            Debug.Log($"PhysicsVessel {_vesselId}: Cleared separation history");
         }
         
         /// <summary>
@@ -1122,7 +1123,7 @@ namespace Lithobrake.Core
             
             if (_orbitalCalculationTime > OrbitalCalculationBudget)
             {
-                GD.PrintErr($"PhysicsVessel {_vesselId}: Orbital state update exceeded budget: {_orbitalCalculationTime:F3}ms");
+                Debug.LogWarning($"PhysicsVessel {_vesselId}: Orbital state update exceeded budget: {_orbitalCalculationTime:F3}ms");
             }
         }
         
@@ -1154,7 +1155,7 @@ namespace Lithobrake.Core
             
             if (gravityCalcTime > 0.2) // 0.2ms budget for gravity calculations
             {
-                GD.PrintErr($"PhysicsVessel {_vesselId}: Gravity calculation exceeded budget: {gravityCalcTime:F3}ms");
+                Debug.LogWarning($"PhysicsVessel {_vesselId}: Gravity calculation exceeded budget: {gravityCalcTime:F3}ms");
             }
         }
         
@@ -1179,7 +1180,7 @@ namespace Lithobrake.Core
                     part.RigidBody.Freeze = true;
                 }
                 
-                GD.Print($"PhysicsVessel {_vesselId}: Set to on-rails mode");
+                Debug.Log($"PhysicsVessel {_vesselId}: Set to on-rails mode");
             }
             else
             {
@@ -1195,7 +1196,7 @@ namespace Lithobrake.Core
                     UpdatePhysicsFromOrbitalState(Time.GetUnixTimeFromSystem());
                 }
                 
-                GD.Print($"PhysicsVessel {_vesselId}: Set to off-rails mode");
+                Debug.Log($"PhysicsVessel {_vesselId}: Set to off-rails mode");
             }
         }
         
@@ -1239,7 +1240,7 @@ namespace Lithobrake.Core
             // Update physics position/velocity
             UpdatePhysicsFromOrbitalState(Time.GetUnixTimeFromSystem());
             
-            GD.Print($"PhysicsVessel {_vesselId}: Set to circular orbit at {altitude/1000:F1}km altitude");
+            Debug.Log($"PhysicsVessel {_vesselId}: Set to circular orbit at {altitude/1000:F1}km altitude");
         }
         
         /// <summary>
@@ -1365,12 +1366,12 @@ namespace Lithobrake.Core
                 
                 if (shiftTime > 0.1) // 0.1ms target per vessel
                 {
-                    GD.PrintErr($"PhysicsVessel {_vesselId}: Origin shift handling took {shiftTime:F3}ms (target: 0.1ms)");
+                    Debug.LogWarning($"PhysicsVessel {_vesselId}: Origin shift handling took {shiftTime:F3}ms (target: 0.1ms)");
                 }
             }
             catch (Exception ex)
             {
-                GD.PrintErr($"PhysicsVessel {_vesselId}: Error handling origin shift: {ex.Message}");
+                Debug.LogError($"PhysicsVessel {_vesselId}: Error handling origin shift: {ex.Message}");
             }
         }
         

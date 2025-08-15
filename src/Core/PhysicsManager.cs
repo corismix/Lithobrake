@@ -2,6 +2,7 @@ using Godot;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using Lithobrake.Core.Utils;
 
 namespace Lithobrake.Core
 {
@@ -48,7 +49,7 @@ namespace Lithobrake.Core
             // Thread-safe singleton validation
             if (_lazyInstance.IsValueCreated && _lazyInstance.Value != this)
             {
-                GD.PrintErr("PhysicsManager: Multiple instances detected!");
+                Debug.LogError("PhysicsManager: Multiple instances detected!");
                 QueueFree();
                 return;
             }
@@ -66,8 +67,8 @@ namespace Lithobrake.Core
             // Register with floating origin system (critical priority)
             FloatingOriginManager.RegisterOriginShiftAware(this);
             
-            GD.Print($"PhysicsManager: Initialized with {FixedDelta:F6}s fixed delta (60Hz)");
-            GD.Print("PhysicsManager: Jolt Physics engine configured with floating origin support");
+            Debug.Log($"PhysicsManager: Initialized with {FixedDelta:F6}s fixed delta (60Hz)");
+            Debug.Log("PhysicsManager: Jolt Physics engine configured with floating origin support");
         }
 
         private void ConfigurePhysicsWorld()
@@ -79,7 +80,7 @@ namespace Lithobrake.Core
             PhysicsServer3D.Singleton.AreaSetParam(world, PhysicsServer3D.AreaParameter.Gravity, 9.81f);
             // Note: LinearDamping and AngularDamping are set via RigidBody properties in Godot 4
             
-            GD.Print("PhysicsManager: Physics world configured for orbital mechanics");
+            Debug.Log("PhysicsManager: Physics world configured for orbital mechanics");
         }
 
         public override void _PhysicsProcess(double delta)
@@ -101,7 +102,7 @@ namespace Lithobrake.Core
             // Check performance budget
             if (physicsTime > PhysicsBudget)
             {
-                GD.PrintErr($"⚠️ Physics budget exceeded: {physicsTime:F2}ms > {PhysicsBudget}ms");
+                Debug.LogError($"⚠️ Physics budget exceeded: {physicsTime:F2}ms > {PhysicsBudget}ms");
             }
         }
 
@@ -278,11 +279,11 @@ namespace Lithobrake.Core
             bool withinBudget = metrics.IsPerformingWithinBudget;
             bool consistentTiming = _physicsTimeSamples.Count >= 60; // Full second of samples
             
-            GD.Print($"Physics Performance Validation:");
-            GD.Print($"  Average Physics Time: {metrics.AveragePhysicsTime:F2}ms (budget: {PhysicsBudget}ms)");
-            GD.Print($"  Within Budget: {withinBudget}");
-            GD.Print($"  Samples Collected: {_physicsTimeSamples.Count}/60");
-            GD.Print($"  Physics Ticks: {metrics.PhysicsTickCount}");
+            Debug.Log($"Physics Performance Validation:");
+            Debug.Log($"  Average Physics Time: {metrics.AveragePhysicsTime:F2}ms (budget: {PhysicsBudget}ms)");
+            Debug.Log($"  Within Budget: {withinBudget}");
+            Debug.Log($"  Samples Collected: {_physicsTimeSamples.Count}/60");
+            Debug.Log($"  Physics Ticks: {metrics.PhysicsTickCount}");
             
             return withinBudget && consistentTiming;
         }
@@ -294,7 +295,7 @@ namespace Lithobrake.Core
         {
             // Access the lazy instance to trigger initialization
             var instance = Instance;
-            GD.Print("PhysicsManager singleton accessed via Lazy<T>");
+            Debug.Log("PhysicsManager singleton accessed via Lazy<T>");
         }
 
         /// <summary>
@@ -381,16 +382,16 @@ namespace Lithobrake.Core
                 stopwatch.Stop();
                 double shiftTime = stopwatch.Elapsed.TotalMilliseconds;
                 
-                GD.Print($"PhysicsManager: Handled origin shift in {shiftTime:F3}ms, world offset now {_worldOriginOffset.Length:F1}m");
+                Debug.Log($"PhysicsManager: Handled origin shift in {shiftTime:F3}ms, world offset now {_worldOriginOffset.Length:F1}m");
                 
                 if (shiftTime > 0.05) // 0.05ms target for physics manager
                 {
-                    GD.PrintErr($"PhysicsManager: Origin shift handling took {shiftTime:F3}ms (target: 0.05ms)");
+                    Debug.LogWarning($"PhysicsManager: Origin shift handling took {shiftTime:F3}ms (target: 0.05ms)");
                 }
             }
             catch (Exception ex)
             {
-                GD.PrintErr($"PhysicsManager: Error handling origin shift: {ex.Message}");
+                Debug.LogError($"PhysicsManager: Error handling origin shift: {ex.Message}");
             }
         }
         
