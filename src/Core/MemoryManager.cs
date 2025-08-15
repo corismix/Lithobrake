@@ -27,6 +27,9 @@ namespace Lithobrake.Core
         private const int MAX_GC_COLLECTIONS_PER_SECOND = 5;
         private const double GC_WARNING_THRESHOLD = 2.0; // ms
         
+        // Large Object Heap safety - arrays >85KB trigger LOH and Gen2 collections
+        private const int MAX_ARRAY_SIZE = 64; // Stay well under LOH threshold
+        
         /// <summary>
         /// Initialize memory management system
         /// </summary>
@@ -47,8 +50,8 @@ namespace Lithobrake.Core
             // Pre-allocate common array sizes for physics calculations
             for (int i = 0; i < 5; i++)
             {
-                _double3ArrayPool.Push(new Double3[100]);  // Common orbital calculation size
-                _vector3ArrayPool.Push(new Vector3[100]);
+                _double3ArrayPool.Push(new Double3[MAX_ARRAY_SIZE]);  // Stay under LOH threshold
+                _vector3ArrayPool.Push(new Vector3[MAX_ARRAY_SIZE]);
                 _dictionaryPool.Push(new Godot.Collections.Dictionary());
             }
             
@@ -70,7 +73,7 @@ namespace Lithobrake.Core
                 }
             }
             
-            return new Double3[Math.Max(minSize, 100)];
+            return new Double3[Math.Max(minSize, MAX_ARRAY_SIZE)];
         }
         
         /// <summary>
@@ -99,7 +102,7 @@ namespace Lithobrake.Core
                 }
             }
             
-            return new Vector3[Math.Max(minSize, 100)];
+            return new Vector3[Math.Max(minSize, MAX_ARRAY_SIZE)];
         }
         
         /// <summary>
@@ -115,6 +118,9 @@ namespace Lithobrake.Core
         
         /// <summary>
         /// Get a pooled Dictionary to minimize allocations
+        /// WARNING: Godot.Collections.Dictionary causes boxing of value types.
+        /// Use Dictionary&lt;TKey, TValue&gt; for performance-critical code without boxing.
+        /// Only use this for Godot API interop requirements.
         /// </summary>
         public static Godot.Collections.Dictionary GetDictionary()
         {
@@ -138,6 +144,18 @@ namespace Lithobrake.Core
                 dictionary.Clear();
                 _dictionaryPool.Push(dictionary);
             }
+        }
+        
+        /// <summary>
+        /// Create a strongly-typed dictionary to avoid boxing of value types.
+        /// Use this instead of GetDictionary() for performance-critical scenarios.
+        /// </summary>
+        /// <typeparam name="TKey">Key type</typeparam>
+        /// <typeparam name="TValue">Value type</typeparam>
+        /// <returns>New strongly-typed dictionary with no boxing</returns>
+        public static Dictionary<TKey, TValue> CreateTypedDictionary<TKey, TValue>() where TKey : notnull
+        {
+            return new Dictionary<TKey, TValue>();
         }
         
         /// <summary>
@@ -194,21 +212,21 @@ namespace Lithobrake.Core
             
             // Test 1: Double3 array allocation with pooling
             var sw1 = Stopwatch.StartNew();
-            var double3Array = GetDouble3Array(100);
+            var double3Array = GetDouble3Array(MAX_ARRAY_SIZE);
             sw1.Stop();
             results.PooledAllocationTime = sw1.Elapsed.TotalMilliseconds;
             ReturnDouble3Array(double3Array);
             
             // Test 2: Direct allocation (no pooling)
             var sw2 = Stopwatch.StartNew();
-            var directArray = new Double3[100];
+            var directArray = new Double3[MAX_ARRAY_SIZE];
             sw2.Stop();
             results.DirectAllocationTime = sw2.Elapsed.TotalMilliseconds;
             
             // Test 3: Vector3 conversion performance with pooling
             var sw3 = Stopwatch.StartNew();
-            var vector3Array = GetVector3Array(100);
-            Double3.FastConvertToVector3Array(double3Array, vector3Array, 0, 100);
+            var vector3Array = GetVector3Array(MAX_ARRAY_SIZE);
+            Double3.FastConvertToVector3Array(double3Array, vector3Array, 0, MAX_ARRAY_SIZE);
             sw3.Stop();
             results.ConversionWithPoolingTime = sw3.Elapsed.TotalMilliseconds;
             ReturnVector3Array(vector3Array);

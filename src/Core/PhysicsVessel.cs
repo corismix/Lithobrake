@@ -21,6 +21,7 @@ namespace Lithobrake.Core
         private readonly List<VesselPart> _parts = new();
         private readonly List<VesselJoint> _joints = new();
         private readonly Dictionary<int, VesselPart> _partLookup = new();
+        private readonly Dictionary<int, VesselJoint> _jointLookup = new();
         
         // Mass properties (cached for performance)
         private double _totalMass = 0.0;
@@ -39,7 +40,7 @@ namespace Lithobrake.Core
         private const int UpdateFrequency = 1; // Update every frame
         
         // Part limit enforcement
-        private const int MaxParts = 75; // From CLAUDE.md constraints
+        private const int MaxParts = UNIVERSE_CONSTANTS.MAX_PARTS_PER_VESSEL;
         
         // Anti-wobble system
         private AntiWobbleSystem? _antiWobbleSystem;
@@ -169,6 +170,14 @@ namespace Lithobrake.Core
                 !_partLookup.TryGetValue(partB, out var partBRef))
             {
                 GD.PrintErr($"PhysicsVessel {_vesselId}: Cannot create joint - invalid part IDs");
+                return false;
+            }
+            
+            // Validate RigidBody objects are still valid
+            if (partARef.RigidBody == null || !GodotObject.IsInstanceValid(partARef.RigidBody) ||
+                partBRef.RigidBody == null || !GodotObject.IsInstanceValid(partBRef.RigidBody))
+            {
+                GD.PrintErr($"PhysicsVessel {_vesselId}: Cannot create joint - invalid RigidBody objects");
                 return false;
             }
             

@@ -41,7 +41,7 @@ namespace Lithobrake.Core
         public double ExhaustScale { get; private set; } = 1.0;
         
         // Constants
-        private const double StandardGravity = 9.81; // m/s²
+        private const double StandardGravity = UNIVERSE_CONSTANTS.KERBIN_STANDARD_GRAVITY;
         private const double MinThrottleForIgnition = 0.01; // 1% minimum throttle
         private const double EngineWarmupTime = 0.2; // Time for engine to warm up
         

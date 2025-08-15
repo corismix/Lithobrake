@@ -101,7 +101,7 @@ namespace Lithobrake.Core
         /// <param name="vessel">Vessel to apply drag forces to</param>
         public static void ApplyDragForces(PhysicsVessel vessel)
         {
-            if (vessel?.Parts == null || vessel.Parts.Count == 0)
+            if (vessel?.Parts == null || !vessel.Parts.Any())
                 return;
             
             var startTime = Time.GetTicksMsec();

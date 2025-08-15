@@ -11,10 +11,10 @@ namespace Lithobrake.Core
     public static class AtmosphericConditions
     {
         // Atmospheric constants for Kerbin-scale atmosphere (from UNIVERSE_CONSTANTS)
-        private const double AtmosphereHeight = 70000.0; // 70km atmosphere height
-        private const double ScaleHeight = 7500.0;       // 7.5km scale height
-        private const double SeaLevelPressure = 101325.0; // 1 atm = 101.325 kPa
-        private const double SeaLevelDensity = 1.225;     // kg/m³ at sea level
+        private const double AtmosphereHeight = UNIVERSE_CONSTANTS.KERBIN_ATMOSPHERE_HEIGHT;
+        private const double ScaleHeight = UNIVERSE_CONSTANTS.KERBIN_SCALE_HEIGHT;
+        private const double SeaLevelPressure = UNIVERSE_CONSTANTS.KERBIN_SEA_LEVEL_PRESSURE;
+        private const double SeaLevelDensity = UNIVERSE_CONSTANTS.KERBIN_SEA_LEVEL_DENSITY;
         private const double GasConstant = 287.0;         // J/(kg·K) for air
         private const double SeaLevelTemperature = 288.15; // 15°C = 288.15K
         

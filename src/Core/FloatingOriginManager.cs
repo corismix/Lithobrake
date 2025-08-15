@@ -95,25 +95,33 @@ namespace Lithobrake.Core
         {
             if (_instance == null) return;
             
-            double distanceFromOrigin = position.Length;
-            
-            if (distanceFromOrigin > OriginShiftThreshold + SafetyBuffer)
+            try
             {
-                // Check if enough time has passed since last shift
-                double currentTime = Time.GetUnixTimeFromSystem();
-                if (currentTime - _instance._lastShiftTime > MinShiftInterval)
+                double distanceFromOrigin = position.Length;
+                
+                if (distanceFromOrigin > OriginShiftThreshold + SafetyBuffer)
                 {
-                    // Check coast period conditions
-                    if (_instance.IsInCoastPeriod())
+                    // Check if enough time has passed since last shift
+                    double currentTime = Time.GetUnixTimeFromSystem();
+                    if (currentTime - _instance._lastShiftTime > MinShiftInterval)
                     {
-                        Double3 shiftAmount = -position.Normalized * OriginShiftThreshold;
-                        _instance.RequestOriginShift(shiftAmount);
-                    }
-                    else
-                    {
-                        GD.Print($"FloatingOriginManager: Origin shift needed but not in coast period (Q or thrust too high)");
+                        // Check coast period conditions
+                        if (_instance.IsInCoastPeriod())
+                        {
+                            Double3 shiftAmount = -position.Normalized * OriginShiftThreshold;
+                            _instance.RequestOriginShift(shiftAmount);
+                        }
+                        else
+                        {
+                            GD.Print($"FloatingOriginManager: Origin shift needed but not in coast period (Q or thrust too high)");
+                        }
                     }
                 }
+            }
+            catch (Exception ex)
+            {
+                GD.PrintErr($"FloatingOriginManager: Critical error in distance monitoring: {ex.Message}");
+                // Continue operation - don't crash the physics system
             }
         }
         

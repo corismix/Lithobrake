@@ -93,8 +93,8 @@ namespace Lithobrake.Core
             if (engines == null || fuelTanks == null || deltaTime <= 0)
                 return result;
             
-            var activeEngines = GetActiveEngines(engines);
-            var availableTanks = GetAvailableTanks(fuelTanks);
+            var activeEngines = GetActiveEngines(engines.ToList());
+            var availableTanks = GetAvailableTanks(fuelTanks.ToList());
             
             _tanksProcessed = availableTanks.Count;
             

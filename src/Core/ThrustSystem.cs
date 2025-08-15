@@ -21,7 +21,7 @@ namespace Lithobrake.Core
         private const double PhysicsIntegrationBudget = 0.3; // ms additional to physics budget
         
         // Physics constants
-        private const double StandardGravity = 9.81; // m/s²
+        private const double StandardGravity = UNIVERSE_CONSTANTS.KERBIN_STANDARD_GRAVITY;
         
         /// <summary>
         /// Calculate total thrust for a vessel's engines

@@ -17,6 +17,10 @@ var _signal_frequency_samples: Array[float] = []
 var _ui_update_times: Array[float] = []
 var _max_samples: int = 60  # 1 second of data at 60fps
 
+# UI update throttling to stay under 3ms GDScript budget
+var _ui_update_counter: int = 0
+const UI_UPDATE_INTERVAL: int = 10  # Update every 10 frames (6 FPS instead of 60 FPS)
+
 func _ready():
 	print("UIBridge: GDScript UI bridge initialized")
 	_setup_ui_elements()
@@ -59,18 +63,23 @@ func _connect_to_csharp_nodes():
 		print("UIBridge: Warning - Performance monitor not found")
 
 func _process(delta):
-	# Measure UI update performance
-	var start_time = Time.get_ticks_usec()
-	
-	_update_ui_performance_display()
-	
-	var end_time = Time.get_ticks_usec()
-	var ui_time = (end_time - start_time) / 1000.0  # Convert to milliseconds
-	
-	# Track UI performance
-	_ui_update_times.append(ui_time)
-	if _ui_update_times.size() > _max_samples:
-		_ui_update_times.pop_front()
+	# Throttle UI updates to stay under 3ms GDScript budget
+	_ui_update_counter += 1
+	if _ui_update_counter >= UI_UPDATE_INTERVAL:
+		_ui_update_counter = 0
+		
+		# Measure UI update performance only when actually updating
+		var start_time = Time.get_ticks_usec()
+		
+		_update_ui_performance_display()
+		
+		var end_time = Time.get_ticks_usec()
+		var ui_time = (end_time - start_time) / 1000.0  # Convert to milliseconds
+		
+		# Track UI performance
+		_ui_update_times.append(ui_time)
+		if _ui_update_times.size() > _max_samples:
+			_ui_update_times.pop_front()
 
 func _update_ui_performance_display():
 	var info_label = find_child("InfoLabel")

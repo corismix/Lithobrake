@@ -169,22 +169,49 @@ namespace Lithobrake.Core
         /// </summary>
         protected virtual Mesh? LoadPartMesh()
         {
-            // Try to load from resources/parts/meshes/
-            var meshPath = $"res://resources/parts/meshes/{PartId.ToLower()}.obj";
-            
-            if (ResourceLoader.Exists(meshPath))
+            try
             {
-                return GD.Load<Mesh>(meshPath);
+                // Try to load from resources/parts/meshes/
+                var meshPath = $"res://resources/parts/meshes/{PartId.ToLower()}.obj";
+                
+                if (ResourceLoader.Exists(meshPath))
+                {
+                    var mesh = GD.Load<Mesh>(meshPath);
+                    if (mesh != null)
+                    {
+                        GD.Print($"Part {PartId}: Successfully loaded mesh from {meshPath}");
+                        return mesh;
+                    }
+                    else
+                    {
+                        GD.PrintErr($"Part {PartId}: Failed to load mesh from {meshPath} - resource returned null");
+                    }
+                }
+                
+                // Try .glb format
+                meshPath = $"res://resources/parts/meshes/{PartId.ToLower()}.glb";
+                if (ResourceLoader.Exists(meshPath))
+                {
+                    var mesh = GD.Load<Mesh>(meshPath);
+                    if (mesh != null)
+                    {
+                        GD.Print($"Part {PartId}: Successfully loaded mesh from {meshPath}");
+                        return mesh;
+                    }
+                    else
+                    {
+                        GD.PrintErr($"Part {PartId}: Failed to load mesh from {meshPath} - resource returned null");
+                    }
+                }
+                
+                GD.PrintErr($"Part {PartId}: No mesh found in resources/parts/meshes/ for formats .obj or .glb");
+                return null;
             }
-            
-            // Try .glb format
-            meshPath = $"res://resources/parts/meshes/{PartId.ToLower()}.glb";
-            if (ResourceLoader.Exists(meshPath))
+            catch (Exception ex)
             {
-                return GD.Load<Mesh>(meshPath);
+                GD.PrintErr($"Part {PartId}: Exception during mesh loading: {ex.Message}");
+                return null;
             }
-            
-            return null;
         }
         
         /// <summary>

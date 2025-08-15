@@ -36,7 +36,18 @@ namespace Lithobrake.Core
 
         // Conversion utilities for Godot interop - aggressively inlined for hot paths
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public Vector3 ToVector3() => new Vector3((float)X, (float)Y, (float)Z);
+        public Vector3 ToVector3()
+        {
+            // Precision-aware conversion with clamping to prevent overflow
+            const double floatMax = 3.4028235e38;
+            const double floatMin = -3.4028235e38;
+            
+            var clampedX = Math.Clamp(X, floatMin, floatMax);
+            var clampedY = Math.Clamp(Y, floatMin, floatMax);
+            var clampedZ = Math.Clamp(Z, floatMin, floatMax);
+            
+            return new Vector3((float)clampedX, (float)clampedY, (float)clampedZ);
+        }
         
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Double3 FromVector3(Vector3 v) => new Double3(v.X, v.Y, v.Z);
@@ -68,7 +79,7 @@ namespace Lithobrake.Core
             for (int i = startIndex; i < endIndex; i++)
             {
                 var src = source[i];
-                destination[i] = new Vector3((float)src.X, (float)src.Y, (float)src.Z);
+                destination[i] = src.ToVector3(); // Use precision-aware conversion
             }
         }
         
@@ -95,7 +106,13 @@ namespace Lithobrake.Core
             for (int i = 0; i < count; i++)
             {
                 ref var src = ref source[i];
-                destination[i] = new Vector3((float)src.X, (float)src.Y, (float)src.Z);
+                // Use precision-aware conversion with clamping
+                const double floatMax = 3.4028235e38;
+                const double floatMin = -3.4028235e38;
+                var clampedX = Math.Clamp(src.X, floatMin, floatMax);
+                var clampedY = Math.Clamp(src.Y, floatMin, floatMax);
+                var clampedZ = Math.Clamp(src.Z, floatMin, floatMax);
+                destination[i] = new Vector3((float)clampedX, (float)clampedY, (float)clampedZ);
             }
         }
         
