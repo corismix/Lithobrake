@@ -58,6 +58,9 @@ namespace Lithobrake.Core
             .Where(vp => vp.PartReference != null && vp.IsActive)
             .Select(vp => vp.PartReference!);
             
+        /// <summary>
+        /// Get the root part of this vessel (first active part with a reference)
+        /// </summary>
         public Part? RootPart => _parts.FirstOrDefault(vp => vp.PartReference != null)?.PartReference;
         
         // Orbital mechanics integration
@@ -85,6 +88,9 @@ namespace Lithobrake.Core
         private double _lastThrustUpdate = 0.0;
         private const double ThrustUpdateFrequency = 1.0 / 60.0; // 60Hz thrust updates
         
+        /// <summary>
+        /// Godot lifecycle method called when node is ready
+        /// </summary>
         public override void _Ready()
         {
             GD.Print($"PhysicsVessel: Node ready, waiting for initialization");
@@ -200,12 +206,14 @@ namespace Lithobrake.Core
                     
                 case JointType.Hinge:
                     joint = new HingeJoint3D();
-                    // TODO: Apply tuning to HingeJoint3D when needed
+                    // NOTE: HingeJoint3D tuning limited by Godot 4.4.1 API
+                    // Only basic parameters exposed, no advanced stiffness/damping control
                     break;
                     
                 case JointType.Ball:
                     joint = new ConeTwistJoint3D();
-                    // TODO: Apply tuning to ConeTwistJoint3D when needed
+                    // NOTE: ConeTwistJoint3D tuning limited by Godot 4.4.1 API
+                    // Only basic parameters exposed, no advanced stiffness/damping control
                     break;
                     
                 case JointType.Separable:
@@ -469,18 +477,24 @@ namespace Lithobrake.Core
         }
         
         /// <summary>
+        /// Get the world position of a part, with fallback to local position
+        /// </summary>
+        private Double3 GetPartWorldPosition(VesselPart part)
+        {
+            return part.TryUseRigidBodyWithDefaultValue(
+                rb => Double3.FromVector3(rb.GlobalPosition), 
+                part.LocalPosition);
+        }
+        
+        /// <summary>
         /// Calculate optimal separation position between two parts
         /// </summary>
         private Double3 CalculateSeparationPosition(VesselPart partA, VesselPart partB)
         {
             if (partA.IsUsable && partB.IsUsable)
             {
-                var posA = partA.TryUseRigidBodyWithDefaultValue(
-                    rb => Double3.FromVector3(rb.GlobalPosition), 
-                    partA.LocalPosition);
-                var posB = partB.TryUseRigidBodyWithDefaultValue(
-                    rb => Double3.FromVector3(rb.GlobalPosition), 
-                    partB.LocalPosition);
+                var posA = GetPartWorldPosition(partA);
+                var posB = GetPartWorldPosition(partB);
                 return (posA + posB) / 2.0; // Midpoint between parts
             }
             
@@ -495,12 +509,8 @@ namespace Lithobrake.Core
         {
             if (partA.IsUsable && partB.IsUsable)
             {
-                var posA = partA.TryUseRigidBodyWithDefaultValue(
-                    rb => Double3.FromVector3(rb.GlobalPosition), 
-                    partA.LocalPosition);
-                var posB = partB.TryUseRigidBodyWithDefaultValue(
-                    rb => Double3.FromVector3(rb.GlobalPosition), 
-                    partB.LocalPosition);
+                var posA = GetPartWorldPosition(partA);
+                var posB = GetPartWorldPosition(partB);
                 var direction = posB - posA;
                 
                 if (direction.Length > 1e-6)
@@ -585,9 +595,7 @@ namespace Lithobrake.Core
                 _totalMass += part.Mass;
                 
                 // Use safe access to get global position
-                var partWorldPos = part.TryUseRigidBodyWithDefaultValue(
-                    rb => Double3.FromVector3(rb.GlobalPosition), 
-                    part.LocalPosition);
+                var partWorldPos = GetPartWorldPosition(part);
                 weightedPosition += partWorldPos * part.Mass;
             }
             
@@ -603,9 +611,7 @@ namespace Lithobrake.Core
                 if (!part.IsActive || !part.IsUsable)
                     continue;
                     
-                var partPos = part.TryUseRigidBodyWithDefaultValue(
-                    rb => Double3.FromVector3(rb.GlobalPosition), 
-                    part.LocalPosition);
+                var partPos = GetPartWorldPosition(part);
                 var relativePos = partPos - _centerOfMass;
                 
                 // Simple point mass approximation
@@ -1258,6 +1264,43 @@ namespace Lithobrake.Core
             bool inAtmosphere = _primaryBody.IsInAtmosphere(_position);
             
             return (altitude, velocity, period, inAtmosphere);
+        }
+        
+        /// <summary>
+        /// Get all engines for thrust calculations
+        /// </summary>
+        public IEnumerable<Engine> GetEngines()
+        {
+            return _engines;
+        }
+        
+        /// <summary>
+        /// Get current throttle setting
+        /// </summary>
+        public double GetThrottle()
+        {
+            return _currentThrottle;
+        }
+        
+        /// <summary>
+        /// Get atmospheric conditions at current position
+        /// </summary>
+        public AtmosphericState GetAtmosphericConditions()
+        {
+            var altitude = GlobalPosition.Y;
+            var atmosphericPressure = GetAtmosphericPressure(altitude);
+            var density = Atmosphere.GetDensity(altitude);
+            var temperature = Atmosphere.GetTemperature(altitude);
+            bool hasAtmosphere = altitude < UNIVERSE_CONSTANTS.KERBIN_ATMOSPHERE_HEIGHT;
+            
+            return new AtmosphericState
+            {
+                Altitude = altitude,
+                Pressure = atmosphericPressure,
+                Density = density,
+                Temperature = temperature,
+                HasAtmosphere = hasAtmosphere
+            };
         }
         
         #region IOriginShiftAware Implementation

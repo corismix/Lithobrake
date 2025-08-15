@@ -115,10 +115,13 @@ namespace Lithobrake.Core
         {
             RigidBody = new RigidBody3D
             {
-                Name = $"{PartName}_RigidBody",
+                Name = $"{PartName}{InternedStrings.RIGID_BODY_SUFFIX}",
                 Mass = (float)GetTotalMass(),
                 GravityScale = 1.0f
             };
+            
+            // Apply space-specific physics configuration
+            SpacePhysicsConfig.ConfigureForSpace(RigidBody);
             
             AddChild(RigidBody);
             
@@ -171,8 +174,23 @@ namespace Lithobrake.Core
         {
             try
             {
+                // Validate PartId to prevent path traversal attacks
+                if (string.IsNullOrEmpty(PartId) || PartId.Contains("..") || PartId.Contains("/") || PartId.Contains("\\") || PartId.Contains(":"))
+                {
+                    GD.PrintErr($"Part: Invalid PartId for resource loading: {PartId}");
+                    return null;
+                }
+                
+                // Sanitize PartId to only allow alphanumeric characters, hyphens, and underscores
+                var sanitizedPartId = System.Text.RegularExpressions.Regex.Replace(PartId, @"[^a-zA-Z0-9_-]", "");
+                if (sanitizedPartId != PartId)
+                {
+                    GD.PrintErr($"Part: PartId contains invalid characters, sanitized: {PartId} -> {sanitizedPartId}");
+                    return null;
+                }
+                
                 // Try to load from resources/parts/meshes/
-                var meshPath = $"res://resources/parts/meshes/{PartId.ToLower()}.obj";
+                var meshPath = $"res://resources/parts/meshes/{sanitizedPartId.ToLower()}.obj";
                 
                 if (ResourceLoader.Exists(meshPath))
                 {

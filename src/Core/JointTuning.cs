@@ -123,9 +123,10 @@ namespace Lithobrake.Core
             // For rigid joints, we lock all axes using the available API
             // The physics engine will use its default stiffness/damping values
             
-            // TODO: When Godot 4.x exposes more joint parameters, implement proper tuning
-            // For now, the joint behavior will depend on the physics engine's defaults
-            // and the joint type (Fixed, Separable, etc.)
+            // NOTE: Godot 4.4.1 API limitation - advanced joint parameters not exposed
+            // Generic6DOFJoint3D only supports basic flag settings, not stiffness/damping
+            // Joint behavior depends on Jolt physics engine defaults
+            // Future Godot versions may expose SetParam methods for fine-tuning
         }
         
         /// <summary>

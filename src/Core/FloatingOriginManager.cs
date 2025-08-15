@@ -342,13 +342,22 @@ namespace Lithobrake.Core
             // For this implementation, we'll use simplified logic
             // In a full implementation, this would check actual vessel states
             
-            // TODO: Check dynamic pressure from atmospheric conditions
-            // TODO: Check thrust levels from active vessels
-            // TODO: Check if any critical operations are in progress
+            // Check dynamic pressure from atmospheric conditions
+            bool safeQ = true;
+            if (DynamicPressure.Instance != null)
+            {
+                var qMetrics = DynamicPressure.Instance.GetPerformanceMetrics();
+                safeQ = qMetrics.CurrentQ < DynamicPressure.LOW_Q_THRESHOLD;
+            }
             
-            // For now, assume safe coast period if no high dynamic pressure detected
-            // This would need to be integrated with vessel systems
-            return true; // Simplified for initial implementation
+            // Check thrust levels from active vessels using PhysicsManager
+            bool inCoastPeriod = PhysicsManager.Instance.IsInCoastPeriod();
+            
+            // Check if any critical operations are in progress
+            // Critical operations: staging, rapid maneuvers, or high dynamic pressure
+            bool noCriticalOps = safeQ && inCoastPeriod;
+            
+            return noCriticalOps;
         }
         
         /// <summary>

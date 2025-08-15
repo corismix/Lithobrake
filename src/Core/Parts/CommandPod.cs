@@ -30,9 +30,9 @@ namespace Lithobrake.Core
             // Set default properties for command pod
             Type = PartType.Command;
             if (string.IsNullOrEmpty(PartId))
-                PartId = "command-pod";
+                PartId = InternedStrings.COMMAND_POD_ID;
             if (string.IsNullOrEmpty(PartName))
-                PartName = "Mk1 Command Pod";
+                PartName = InternedStrings.COMMAND_POD_NAME;
             if (string.IsNullOrEmpty(Description))
                 Description = "A basic command pod capable of housing one crew member";
             

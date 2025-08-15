@@ -1,7 +1,10 @@
 using Godot;
 using System;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.X64;
 
 namespace Lithobrake.Core
 {
@@ -147,6 +150,77 @@ namespace Lithobrake.Core
             
             stopwatch.Stop();
             return stopwatch.Elapsed.TotalMilliseconds;
+        }
+
+        // SIMD-optimized bulk operations for M4 performance
+        /// <summary>
+        /// SIMD-optimized bulk addition for arrays of vectors
+        /// </summary>
+        public static unsafe void AddArraysSIMD(ReadOnlySpan<Double3> a, ReadOnlySpan<Double3> b, Span<Double3> result)
+        {
+            if (a.Length != b.Length || a.Length != result.Length)
+                throw new ArgumentException("Array lengths must match");
+                
+            int length = a.Length;
+            int vectorSize = Vector<double>.Count;
+            int vectorizedLength = length - (length % vectorSize);
+            
+            fixed (Double3* aPtr = a, bPtr = b, resultPtr = result)
+            {
+                double* aDoubles = (double*)aPtr;
+                double* bDoubles = (double*)bPtr;
+                double* resultDoubles = (double*)resultPtr;
+                
+                // Process vectorized portion (3 components per Double3)
+                for (int i = 0; i < vectorizedLength * 3; i += vectorSize)
+                {
+                    var vecA = new Vector<double>(new ReadOnlySpan<double>(aDoubles + i, vectorSize));
+                    var vecB = new Vector<double>(new ReadOnlySpan<double>(bDoubles + i, vectorSize));
+                    var vecResult = vecA + vecB;
+                    vecResult.CopyTo(new Span<double>(resultDoubles + i, vectorSize));
+                }
+                
+                // Handle remaining elements
+                for (int i = vectorizedLength; i < length; i++)
+                {
+                    result[i] = a[i] + b[i];
+                }
+            }
+        }
+        
+        /// <summary>
+        /// SIMD-optimized bulk scalar multiplication for arrays of vectors
+        /// </summary>
+        public static unsafe void MultiplyScalarArraySIMD(ReadOnlySpan<Double3> vectors, double scalar, Span<Double3> result)
+        {
+            if (vectors.Length != result.Length)
+                throw new ArgumentException("Array lengths must match");
+                
+            int length = vectors.Length;
+            int vectorSize = Vector<double>.Count;
+            int vectorizedLength = length - (length % vectorSize);
+            
+            var scalarVector = new Vector<double>(scalar);
+            
+            fixed (Double3* vectorsPtr = vectors, resultPtr = result)
+            {
+                double* vectorsDoubles = (double*)vectorsPtr;
+                double* resultDoubles = (double*)resultPtr;
+                
+                // Process vectorized portion (3 components per Double3)
+                for (int i = 0; i < vectorizedLength * 3; i += vectorSize)
+                {
+                    var vec = new Vector<double>(new ReadOnlySpan<double>(vectorsDoubles + i, vectorSize));
+                    var vecResult = vec * scalarVector;
+                    vecResult.CopyTo(new Span<double>(resultDoubles + i, vectorSize));
+                }
+                
+                // Handle remaining elements
+                for (int i = vectorizedLength; i < length; i++)
+                {
+                    result[i] = vectors[i] * scalar;
+                }
+            }
         }
 
         // Arithmetic operators - aggressively inlined for physics calculations

@@ -330,9 +330,17 @@ namespace Lithobrake.Core
                         }
                     }
                     
-                    // TODO: Add thrust checking when propulsion system is implemented
-                    // For now, assume coast period if dynamic pressure is low
-                    isInCoast = true;
+                    // Check thrust levels using ThrustSystem
+                    var engines = vessel.GetEngines();
+                    var throttle = vessel.GetThrottle();
+                    var atmospheric = vessel.GetAtmosphericConditions();
+                    var thrustResult = ThrustSystem.CalculateVesselThrust(engines, throttle, atmospheric.Pressure);
+                    
+                    // Coast period if thrust is minimal (< 1kN) and dynamic pressure is low
+                    bool lowThrust = thrustResult.TotalThrust < 1000.0; // Less than 1kN
+                    bool lowQ = atmospheric.GetDynamicPressure(velocity) < DynamicPressure.LOW_Q_THRESHOLD;
+                    
+                    isInCoast = lowThrust && lowQ;
                 });
                 
                 if (!isInCoast)

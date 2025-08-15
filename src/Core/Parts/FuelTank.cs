@@ -37,9 +37,9 @@ namespace Lithobrake.Core
             // Set default properties for fuel tank
             Type = PartType.FuelTank;
             if (string.IsNullOrEmpty(PartId))
-                PartId = "fuel-tank";
+                PartId = InternedStrings.FUEL_TANK_ID;
             if (string.IsNullOrEmpty(PartName))
-                PartName = "FL-T400 Fuel Tank";
+                PartName = InternedStrings.FUEL_TANK_NAME;
             if (string.IsNullOrEmpty(Description))
                 Description = "A basic fuel tank for storing liquid fuel";
             

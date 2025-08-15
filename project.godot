@@ -38,7 +38,9 @@ anti_aliasing/quality/msaa_3d=2
 anti_aliasing/quality/screen_space_aa=0
 anti_aliasing/quality/use_taa=false
 textures/canvas_textures/default_texture_filter=1
-driver/threads/thread_model=2
+textures/vram_compression/import_etc2_astc=true
+vulkan/rendering/back_end=2
+driver/threads/thread_model=1
 
 [debug]
 

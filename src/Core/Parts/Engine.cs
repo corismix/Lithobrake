@@ -56,9 +56,9 @@ namespace Lithobrake.Core
             // Set default properties for engine
             Type = PartType.Engine;
             if (string.IsNullOrEmpty(PartId))
-                PartId = "engine";
+                PartId = InternedStrings.ENGINE_ID;
             if (string.IsNullOrEmpty(PartName))
-                PartName = "LV-T30 \"Reliant\" Engine";
+                PartName = InternedStrings.ENGINE_NAME;
             if (string.IsNullOrEmpty(Description))
                 Description = "A basic liquid fuel rocket engine";
             
